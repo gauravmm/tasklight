@@ -248,7 +248,7 @@ The view groups records by `dirname`. Groups with all records dismissed are hidd
 ```
 
 - **Dirname header**: monospace, dimmed foreground; click to collapse/expand the group (see §7.3)
-- **Spinner**: Unicode glyph cycling through frames; style is configurable (see §7.4); driven by a single `QTimer` at 16 ms (~60 fps) ticking only when any `THINKING` or `TOOL` agents exist
+- **Spinner**: Unicode glyph cycling through frames; `claude-code` uses the Claude spinner and all other sources use braille; driven by a single `QTimer` at 125 ms (8 fps) ticking only when any `THINKING` or `TOOL` agents exist and animation is enabled
 - **Status dot** (●): color-coded (green = DONE, red = APPROVAL)
 - **Label**: state description; `Tool: <name>` during TOOL state
 - **Elapsed timer**: right-aligned, shows time in current state; format `MM:SS` under 1 h, `HH:MM:SS` above; updated by a 1 Hz `QTimer`
@@ -268,21 +268,22 @@ When collapsed, the header inherits the highest-priority status of any agent in 
 
 This ensures a collapsed group can never silently hide an approval request.
 
+The collapsed header timer shows the minimum active row timer in the group, so the summary never overstates how long every agent has been in its current state.
+
 ### 7.4 Spinner Styles
 
-Spinners are rendered as Unicode text glyphs, not `QPainter` arcs, so they work with any monospace font and require no image assets. A global frame counter increments on each 16 ms timer tick; each active row reads `frame % len(frames)` to pick its glyph.
+Spinners are rendered as Unicode text glyphs, not `QPainter` arcs, so they work with any monospace font and require no image assets. A global frame counter increments on each 125 ms timer tick; each active row reads `frame % len(frames)` to pick its glyph.
 
-Three built-in styles:
+Built-in styles:
 
 | Name | Width | Frames | Frame count |
 |---|---|---|---|
 | `claude` | 1 char | `·` `✻` `✽` `✶` `✱` `✢` | 6 |
 | `braille` | 1 char | `⠋` `⠙` `⠹` `⠸` `⠼` `⠴` `⠦` `⠧` `⠇` `⠏` | 10 |
-| `opencode` | 2 chars | `⢎⡱` `⢞⡳` `⢎⡷` `⢮⡵` `⢾⡱` `⠰⠆` `⢾⡷` `⠰⠆` | 8 |
 
-The `opencode` style occupies two character cells; the layout must reserve a fixed two-cell glyph column so rows don't shift width between frames. All other styles occupy one cell; when `opencode` is not selected, the column is still sized to two cells for consistency.
+`claude-code` rows use the `claude` frames. All other rows use `braille`.
 
-Style is set in `config.yaml` under `theme.spinner` and hot-reloads with the rest of the theme.
+If `theme.animate_spinners` is `false`, active rows render a single representative static glyph instead of cycling frames.
 
 ### 7.5 Sizing
 
@@ -330,6 +331,7 @@ theme:
   background_alpha: 0.85        # 0.0–1.0
   foreground: "#e8e8e8"
   dimmed: "#888888"
+  animate_spinners: true
   accent_spinner: "#5599ff"
   accent_done: "#44cc77"
   accent_approval: "#ff4444"
@@ -337,7 +339,6 @@ theme:
   font_family: "monospace"
   font_size_px: 13
   corner_radius: 10
-  spinner: braille          # claude | braille | opencode
 
 timeouts:
   done_auto_remove_s: 0       # 0 = never auto-remove; else seconds after DONE
@@ -375,12 +376,12 @@ Theme changes take effect immediately; port changes require restart (shown as a 
 
 ## 11. Performance
 
-- **Single repaint timer**: one `QTimer` at 16 ms drives spinner animation only when `THINKING` or `TOOL` agents are present; stops when all agents are DONE or gone.
+- **Single repaint timer**: one `QTimer` at 125 ms drives spinner animation only when `THINKING` or `TOOL` agents are present and `theme.animate_spinners` is true; stops when all agents are DONE or gone.
 - **Elapsed timer**: a separate 1 Hz `QTimer` repaints only the time-label column, not the full widget.
 - **Model signals**: `AgentStateModel` emits fine-grained `dataChanged` with role masks so only the affected cell repaints.
 - **No polling**: state is push-only from hooks. No background thread polls agents.
 - **YAML parsing**: done in the watcher thread; only the parsed `AppConfig` dataclass crosses to the main thread via signal.
-- **Spinner rendering**: Unicode text glyphs drawn with `QPainter.drawText`; no image assets. A global frame counter increments on each 16 ms tick; each row reads `frame % len(frames)` — no per-row animation state needed.
+- **Spinner rendering**: Unicode text glyphs drawn with `QPainter.drawText`; no image assets. A global frame counter increments on each 125 ms tick; each row reads `frame % len(frames)` — no per-row animation state needed.
 
 ---
 
