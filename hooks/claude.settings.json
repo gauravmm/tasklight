@@ -1,0 +1,66 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event Stop"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event SessionEnd"
+          }
+        ]
+      }
+    ]
+  }
+}

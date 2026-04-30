@@ -1,0 +1,54 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source codex --event SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source codex --event UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source codex --event PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source codex --event PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source codex --event Stop"
+          }
+        ]
+      }
+    ]
+  }
+}
