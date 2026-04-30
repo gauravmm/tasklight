@@ -75,6 +75,11 @@ class OverlayWidget(QWidget):
         self._anim.setInterval(125)
         self._anim.timeout.connect(self._tick_spinner)
 
+        self._cursor_hide = QTimer(self)
+        self._cursor_hide.setSingleShot(True)
+        self._cursor_hide.setInterval(3000)
+        self._cursor_hide.timeout.connect(self._hide_cursor)
+
         self._refresh()
         self._move_to_dock()
 
@@ -159,6 +164,7 @@ class OverlayWidget(QWidget):
 
         if not self._cfg.theme.use_system_cursor:
             self._cursor_pos = event.position()
+            self._cursor_hide.start()
             self.update()
 
         if (
@@ -361,6 +367,10 @@ class OverlayWidget(QWidget):
         painter.setPen(QPen(QColor(0, 0, 0), 1))
         painter.drawPolygon(self._CURSOR_POINTS)
         painter.restore()
+
+    def _hide_cursor(self) -> None:
+        self._cursor_pos = None
+        self.update()
 
     def _apply_cursor_mode(self) -> None:
         self.setCursor(Qt.CursorShape.ArrowCursor)
