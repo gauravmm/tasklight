@@ -100,12 +100,6 @@ class OverlayWidget(QWidget):
             event.ignore()
 
     def paintEvent(self, _event) -> None:  # noqa: N802
-        try:
-            self._paint()
-        except KeyboardInterrupt:
-            QApplication.instance().quit()
-
-    def _paint(self) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setFont(self._font())

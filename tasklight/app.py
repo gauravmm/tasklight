@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import sys
 import traceback
 from pathlib import Path
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
 from tasklight.config import AppConfig, ConfigWatcher, load_config, save_config
@@ -62,6 +64,13 @@ def run(config_path: Path) -> int:
     tray = create_tray(overlay, context_menu)
     if tray is None:
         print("Warning: system tray not available.", file=sys.stderr)
+
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    # Qt's event loop doesn't yield to Python often enough to deliver SIGINT
+    # without a periodic wakeup. This no-op timer unblocks signal checking.
+    _sigint_wakeup = QTimer()
+    _sigint_wakeup.start(200)
+    _sigint_wakeup.timeout.connect(lambda: None)
 
     app.aboutToQuit.connect(server.stop)
     return app.exec()
