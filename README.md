@@ -74,7 +74,7 @@ theme:
   animate_spinners: true
   accent_done: "#44cc77"
   accent_approval: "#ff4444"
-  approval_row_bg: "#3a2800"
+  approval_row_bg: "#a47000"
   font_family: "monospace"
   font_size_px: 13
   corner_radius: 10

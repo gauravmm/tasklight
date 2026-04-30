@@ -12,7 +12,7 @@ from PyQt6.QtCore import QFileSystemWatcher, QObject, pyqtSignal
 
 @dataclass
 class DockConfig:
-    position: str = "BR"   # TL|TC|TR|ML|MR|BL|BC|BR
+    position: str = "BR"  # TL|TC|TR|ML|MR|BL|BC|BR
     margin: int = 16
     width: int = 360
 
@@ -27,7 +27,7 @@ class ThemeConfig:
     animate_spinners: bool = True
     accent_done: str = "#44cc77"
     accent_approval: str = "#ff4444"
-    approval_row_bg: str = "#3a2800"
+    approval_row_bg: str = "#a47000"
     font_family: str = "monospace"
     font_size_px: int = 13
     corner_radius: int = 10
@@ -80,7 +80,9 @@ def load_config(path: Path) -> AppConfig:
         return cfg
     with path.open() as fh:
         raw = yaml.safe_load(fh) or {}
-    _merge(cfg, {k: v for k, v in raw.items() if k not in ("dock", "theme", "timeouts")})
+    _merge(
+        cfg, {k: v for k, v in raw.items() if k not in ("dock", "theme", "timeouts")}
+    )
     if "dock" in raw and isinstance(raw["dock"], dict):
         _merge(cfg.dock, raw["dock"])
     if "theme" in raw and isinstance(raw["theme"], dict):
@@ -104,7 +106,7 @@ def save_config(path: Path, cfg: AppConfig) -> None:
 
 
 class ConfigWatcher(QObject):
-    config_changed = pyqtSignal(object)   # emits AppConfig
+    config_changed = pyqtSignal(object)  # emits AppConfig
 
     def __init__(self, path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
