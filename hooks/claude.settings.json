@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event SessionStart"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=start\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event UserPromptSubmit"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event PreToolUse"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$CLAUDE_TOOL_NAME\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event PostToolUse"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event Stop"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=stop\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /ABS/PATH/TO/tasklight/hooks/tasklight_hook.py --source claude-code --event SessionEnd"
+            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=exit\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }

@@ -162,10 +162,9 @@ class OverlayWidget(QWidget):
             self.update()
 
         if (
-            self._pressed_row is None
-            or self._press_global_pos is None
+            self._press_global_pos is None
             or self._drag_offset is None
-            or not isinstance(self._pressed_row, HeaderRow)
+            or (isinstance(self._pressed_row, AgentRow) and self._pressed_row.record_session_id)
         ):
             return
 

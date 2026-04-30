@@ -2,6 +2,7 @@
 
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -12,6 +13,38 @@ _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # silence default stderr logging
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/hook":
+            self._respond(404)
+            return
+
+        self._respond(204)
+
+        params = parse_qs(parsed.query, keep_blank_values=False)
+
+        def first(key):
+            vals = params.get(key)
+            return vals[0] if vals else None
+
+        source = first("source")
+        session_id = first("session_id")
+        cwd = first("cwd")
+        event = first("event")
+
+        if not all([source, session_id, cwd, event]):
+            return
+
+        payload = {
+            "source": source,
+            "session_id": session_id,
+            "cwd": cwd,
+            "event": event,
+            "data": {"tool_name": first("tool_name") or "tool"} if event == "tool_use" else {},
+        }
+
+        self.server.hook_server.event_received.emit(payload)
 
     def do_POST(self):
         if self.path != "/hook":

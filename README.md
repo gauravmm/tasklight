@@ -1,4 +1,4 @@
-# Tasklight
+# <img src="spec/logo.png" height="32" /> Tasklight
 
 Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time.
 
@@ -75,25 +75,21 @@ They all forward lifecycle/tool events to Tasklight’s local hook server.
 
 ### Shared behavior
 
-- the shared Python helper is [hooks/tasklight_hook.py](hooks/tasklight_hook.py)
 - the default endpoint is `http://127.0.0.1:57017/hook`
-- you can override the endpoint with `TASKLIGHT_URL`
 - hook delivery is best-effort and intentionally ignores connection failures
 
 ### Claude Code
 
-Files:
+File: [hooks/claude.settings.json](hooks/claude.settings.json)
 
-- [hooks/claude.settings.json](hooks/claude.settings.json)
-- [hooks/tasklight_hook.py](hooks/tasklight_hook.py)
+Requires: `curl` on `PATH`.
 
-Install:
+Uses Claude Code's built-in env vars: `$CLAUDE_SESSION_ID`, `$CLAUDE_TOOL_NAME`, and `$PWD`.
 
-1. Replace `/ABS/PATH/TO/tasklight` in `hooks/claude.settings.json` with the real absolute path to this repo.
-2. Merge the `hooks` block into either:
-   - project config: `.claude/settings.json`
-   - user config: Claude Code settings location
-3. Ensure `python3` is available on your `PATH`.
+Install: merge the `hooks` block into either:
+
+- project config: `.claude/settings.json`
+- user config: Claude Code settings location
 
 These hooks emit:
 
@@ -106,21 +102,11 @@ These hooks emit:
 
 ### Codex CLI
 
-Files:
+File: [hooks/codex.hooks.json](hooks/codex.hooks.json)
 
-- [hooks/codex.hooks.json](hooks/codex.hooks.json)
-- [hooks/tasklight_hook.py](hooks/tasklight_hook.py)
+Requires: `curl` and `jq` on `PATH`. (Codex passes data via stdin JSON rather than env vars; `jq` extracts `session_id`, `cwd`, and `tool_name`.)
 
-Install:
-
-1. Replace `/ABS/PATH/TO/tasklight` in `hooks/codex.hooks.json` with the real absolute path to this repo.
-2. Copy the file to:
-
-```text
-~/.codex/hooks.json
-```
-
-3. Ensure `python3` is available on your `PATH`.
+Install: copy to `~/.codex/hooks.json`.
 
 The included config wires these Codex events:
 
@@ -145,7 +131,7 @@ Install:
 ~/.config/opencode/plugins/tasklight.js
 ```
 
-2. Restart OpenCode.
+1. Restart OpenCode.
 
 This plugin listens for:
 
@@ -199,13 +185,15 @@ Most config changes hot-reload automatically. Port changes still require a resta
 
 ## Hook Payload
 
-The HTTP server accepts `POST` requests to:
+The HTTP server accepts requests to `http://127.0.0.1:57017/hook` in two formats:
+
+**GET with query params** (used by Claude Code and Codex hooks):
 
 ```text
-http://127.0.0.1:57017/hook
+GET /hook?source=claude-code&session_id=abc123&cwd=%2Fpath%2Fto%2Fproject&event=tool_use&tool_name=Bash
 ```
 
-Payload shape:
+**POST with JSON body** (used by the OpenCode plugin):
 
 ```json
 {

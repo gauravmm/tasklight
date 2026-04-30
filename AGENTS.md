@@ -24,7 +24,7 @@ There is currently no formal automated test suite beyond basic compile checks an
 High-level flow:
 
 ```text
-hook POST
+hook GET or POST to /hook
   -> tasklight.server.HookServer
   -> tasklight.model.AgentStateModel.apply_event()
   -> overlay refresh/repaint
@@ -82,7 +82,19 @@ When changing overlay behavior, validate as many of these as practical:
 
 ## Hook Payload Reference
 
-Expected payload shape:
+The server accepts both `GET /hook?param=value&...` (query params) and `POST /hook` (JSON body).
+
+GET query params — used by Claude Code and Codex hooks:
+
+| Param | Required | Notes |
+|---|---|---|
+| `source` | yes | e.g. `claude-code`, `codex` |
+| `session_id` | yes | opaque stable identifier |
+| `cwd` | yes | absolute project path |
+| `event` | yes | see events below |
+| `tool_name` | no | only for `tool_use` events |
+
+POST JSON body — used by OpenCode plugin:
 
 ```json
 {
@@ -93,6 +105,8 @@ Expected payload shape:
   "data": {}
 }
 ```
+
+Hook file dependencies: Claude Code hooks require `curl`; Codex hooks require `curl` and `jq`.
 
 Supported events:
 
