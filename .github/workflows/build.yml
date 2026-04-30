@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Build exe
+        run: uv run pyinstaller tasklight.spec
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasklight-windows
+          path: dist/tasklight.exe
+
+  linux-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build wheel
+        run: uv build --wheel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasklight-wheel
+          path: dist/*.whl

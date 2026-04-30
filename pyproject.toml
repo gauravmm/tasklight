@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "tasklight"
 version = "0.1.0"
@@ -7,4 +11,12 @@ requires-python = ">=3.14"
 dependencies = [
     "pyqt6>=6.11.0",
     "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+tasklight = "tasklight.app:cli"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.20.0",
 ]

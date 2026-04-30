@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import traceback
@@ -64,3 +65,17 @@ def run(config_path: Path) -> int:
 
     app.aboutToQuit.connect(server.stop)
     return app.exec()
+
+
+def cli() -> None:
+    parser = argparse.ArgumentParser(description="Tasklight agent monitor")
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=Path,
+        default=Path("tasklight.yaml"),
+        metavar="PATH",
+        help="Config file (default: ./tasklight.yaml)",
+    )
+    args = parser.parse_args()
+    raise SystemExit(run(args.config))
