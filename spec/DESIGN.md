@@ -331,6 +331,7 @@ theme:
   background_alpha: 0.85        # 0.0–1.0
   foreground: "#e8e8e8"
   dimmed: "#888888"
+  use_system_cursor: true
   animate_spinners: true
   accent_done: "#44cc77"
   accent_approval: "#ff4444"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import yaml
@@ -23,6 +23,7 @@ class ThemeConfig:
     background_alpha: float = 0.85
     foreground: str = "#e8e8e8"
     dimmed: str = "#888888"
+    use_system_cursor: bool = True
     animate_spinners: bool = True
     accent_done: str = "#44cc77"
     accent_approval: str = "#ff4444"
@@ -87,6 +88,19 @@ def load_config(path: Path) -> AppConfig:
     if "timeouts" in raw and isinstance(raw["timeouts"], dict):
         _merge(cfg.timeouts, raw["timeouts"])
     return cfg
+
+
+def save_config(path: Path, cfg: AppConfig) -> None:
+    """Write the current config back to disk."""
+    if not path.parent.exists():
+        return
+    with path.open("w") as fh:
+        yaml.dump(
+            asdict(cfg),
+            fh,
+            default_flow_style=False,
+            sort_keys=False,
+        )
 
 
 class ConfigWatcher(QObject):

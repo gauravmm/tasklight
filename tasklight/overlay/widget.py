@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QPainter, QPen, QScreen
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from tasklight.config import AppConfig
@@ -25,6 +25,9 @@ class OverlayColors:
 
 
 class OverlayWidget(QWidget):
+    dock_position_changed = pyqtSignal(str)
+    _SNAP_EDGE_THRESHOLD_PX = 20
+
     _CURSOR_POINTS = [
         QPoint(0, 0),
         QPoint(0, 18),
@@ -46,11 +49,17 @@ class OverlayWidget(QWidget):
         self._cursor_pos: QPointF | None = None
         self._collapsed_groups: set[str] = set()
         self._context_menu: QMenu | None = None
+        self._pressed_row: HeaderRow | AgentRow | None = None
+        self._press_global_pos: QPointF | None = None
+        self._drag_offset: QPointF | None = None
+        self._drag_screen: QScreen | None = None
+        self._dragging = False
+        self._is_docked = True
+        self._docked_screen: QScreen | None = None
         self._colors = self._build_colors()
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.setMouseTracking(True)
+        self._apply_cursor_mode()
         self.setFixedWidth(cfg.dock.width)
 
         model.dataChanged.connect(self._refresh)
@@ -75,7 +84,9 @@ class OverlayWidget(QWidget):
     def apply_config(self, cfg: AppConfig) -> None:
         self._cfg = cfg
         self._colors = self._build_colors()
+        self._apply_cursor_mode()
         self.setFixedWidth(cfg.dock.width)
+        self._is_docked = True
         self._refresh()
         self._move_to_dock()
 
@@ -120,7 +131,8 @@ class OverlayWidget(QWidget):
             else:
                 self._paint_agent_row(painter, row, baseline, layout)
 
-        self._draw_cursor(painter)
+        if not self._cfg.theme.use_system_cursor:
+            self._draw_cursor(painter)
         painter.end()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
@@ -135,31 +147,93 @@ class OverlayWidget(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
 
-        row = hit_test(self._layout(QFontMetrics(self.font())), event.position())
-        if isinstance(row, HeaderRow):
-            self._toggle_group(row.dirname)
-            return
-
-        if (
-            isinstance(row, AgentRow)
-            and row.record_session_id
-            and row.state == AgentState.DONE
-        ):
-            self._model.dismiss(row.record_session_id)
+        self._pressed_row = hit_test(self._layout(QFontMetrics(self.font())), event.position())
+        self._press_global_pos = event.globalPosition()
+        self._drag_offset = event.globalPosition() - QPointF(self.x(), self.y())
+        self._drag_screen = self._screen_for_point(event.globalPosition().toPoint())
+        self._dragging = False
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        if event is not None:
+        if event is None:
+            return
+
+        if not self._cfg.theme.use_system_cursor:
             self._cursor_pos = event.position()
             self.update()
 
+        if (
+            self._pressed_row is None
+            or self._press_global_pos is None
+            or self._drag_offset is None
+            or not isinstance(self._pressed_row, HeaderRow)
+        ):
+            return
+
+        if not self._dragging:
+            if (
+                event.globalPosition() - self._press_global_pos
+            ).manhattanLength() < QApplication.startDragDistance():
+                return
+            self._dragging = True
+
+        self._drag_screen = self._screen_for_point(event.globalPosition().toPoint())
+        target = event.globalPosition() - self._drag_offset
+        self.move(int(target.x()), int(target.y()))
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event is None or event.button() != Qt.MouseButton.LeftButton:
+            return
+
+        pressed_row = self._pressed_row
+        was_dragging = self._dragging
+        snap_enabled = not bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        self._pressed_row = None
+        self._press_global_pos = None
+        self._drag_offset = None
+        drag_screen = self._drag_screen
+        self._drag_screen = None
+        self._dragging = False
+
+        if was_dragging:
+            if snap_enabled:
+                position = self._snap_to_nearest_dock(
+                    drag_screen,
+                    event.globalPosition().toPoint(),
+                )
+                if position is not None:
+                    self.dock_position_changed.emit(position)
+                else:
+                    self._is_docked = False
+                    self._docked_screen = None
+            else:
+                self._is_docked = False
+                self._docked_screen = None
+            return
+
+        if isinstance(pressed_row, HeaderRow):
+            self._toggle_group(pressed_row.dirname)
+            return
+
+        if (
+            isinstance(pressed_row, AgentRow)
+            and pressed_row.record_session_id
+            and pressed_row.state == AgentState.DONE
+        ):
+            self._model.dismiss(pressed_row.record_session_id)
+
     def enterEvent(self, event) -> None:  # noqa: N802
-        if event is not None and hasattr(event, "position"):
+        if (
+            not self._cfg.theme.use_system_cursor
+            and event is not None
+            and hasattr(event, "position")
+        ):
             self._cursor_pos = event.position()
         self.update()
 
     def leaveEvent(self, _event) -> None:  # noqa: N802
-        self._cursor_pos = None
-        self.update()
+        if not self._cfg.theme.use_system_cursor:
+            self._cursor_pos = None
+            self.update()
 
     def _font(self) -> QFont:
         font = QFont(self._cfg.theme.font_family)
@@ -289,6 +363,12 @@ class OverlayWidget(QWidget):
         painter.drawPolygon(self._CURSOR_POINTS)
         painter.restore()
 
+    def _apply_cursor_mode(self) -> None:
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setMouseTracking(not self._cfg.theme.use_system_cursor)
+        if self._cfg.theme.use_system_cursor:
+            self._cursor_pos = None
+
     def _toggle_group(self, dirname: str) -> None:
         if dirname in self._collapsed_groups:
             self._collapsed_groups.remove(dirname)
@@ -304,6 +384,8 @@ class OverlayWidget(QWidget):
         self.setFont(self._font())
         layout = self._layout(QFontMetrics(self.font()))
         self.setFixedHeight(layout.total_height)
+        if self._is_docked:
+            self._move_to_dock(self._docked_screen)
         if self._has_active_rows(layout):
             if not self._anim.isActive():
                 self._anim.start()
@@ -312,25 +394,89 @@ class OverlayWidget(QWidget):
         self.show()
         self.update()
 
-    def _move_to_dock(self) -> None:
-        screen = QApplication.primaryScreen()
+    def _move_to_dock(self, screen: QScreen | None = None) -> None:
+        screen = screen or self._current_screen()
         if screen is None:
             return
+        self._docked_screen = screen
+        position = self._cfg.dock.position
+        x, y = self._dock_coordinates(position, screen)
+        self.move(x, y)
+
+    def _snap_to_nearest_dock(
+        self,
+        screen: QScreen | None = None,
+        release_point: QPoint | None = None,
+    ) -> str | None:
+        point = release_point or self._window_center()
+        screen = screen or self._screen_for_point(point)
+        if screen is None:
+            return None
+
+        geometry = screen.availableGeometry()
+        distances = {
+            "L": abs(point.x() - geometry.left()),
+            "R": abs(geometry.right() - point.x()),
+            "T": abs(point.y() - geometry.top()),
+            "B": abs(geometry.bottom() - point.y()),
+        }
+        nearest_edge, nearest_distance = min(distances.items(), key=lambda item: item[1])
+        if nearest_distance > self._SNAP_EDGE_THRESHOLD_PX:
+            return None
+
+        rel_x = point.x() - geometry.left()
+        rel_y = point.y() - geometry.top()
+        x_third = geometry.width() / 3
+        y_third = geometry.height() / 3
+
+        if nearest_edge in ("L", "R"):
+            vert = "T" if rel_y < y_third else "B" if rel_y > y_third * 2 else "M"
+            position = f"{vert}{nearest_edge}"
+        else:
+            horiz = "L" if rel_x < x_third else "R" if rel_x > x_third * 2 else "C"
+            position = f"{nearest_edge}{horiz}"
+
+        self._is_docked = True
+        self._docked_screen = screen
+        self._cfg.dock.position = position
+        target_x, target_y = self._dock_coordinates(position, screen)
+        self.move(target_x, target_y)
+        return position
+
+    def _window_center(self) -> QPoint:
+        return self.pos() + QPoint(self.width() // 2, self.height() // 2)
+
+    def _screen_for_point(self, point: QPoint) -> QScreen | None:
+        return QGuiApplication.screenAt(point) or QApplication.primaryScreen()
+
+    def _current_screen(self) -> QScreen | None:
+        return self._docked_screen or self._screen_for_point(self._window_center())
+
+    def _frame_insets(self) -> tuple[int, int, int, int]:
+        frame = self.frameGeometry()
+        content = self.geometry()
+        return (
+            content.left() - frame.left(),
+            content.top() - frame.top(),
+            frame.right() - content.right(),
+            frame.bottom() - content.bottom(),
+        )
+
+    def _dock_coordinates(self, position: str, screen: QScreen) -> tuple[int, int]:
         geometry = screen.availableGeometry()
         margin = self._cfg.dock.margin
-        position = self._cfg.dock.position
         width, height = self.width(), self.height()
+        inset_left, inset_top, _inset_right, _inset_bottom = self._frame_insets()
 
         x = {
-            "L": geometry.left() + margin,
+            "L": geometry.x() + margin - inset_left,
             "C": geometry.center().x() - width // 2,
-            "R": geometry.right() - width - margin,
+            "R": geometry.x() + geometry.width() - width - margin - inset_left,
         }[position[1] if len(position) == 2 else "R"]
 
         y = {
-            "T": geometry.top() + margin,
+            "T": geometry.y() + margin - inset_top,
             "M": geometry.center().y() - height // 2,
-            "B": geometry.bottom() - height - margin,
+            "B": geometry.y() + geometry.height() - height - margin - inset_top,
         }[position[0]]
-
-        self.move(x, y)
+        return x, y

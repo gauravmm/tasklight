@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 
-from tasklight.config import ConfigWatcher, load_config
+from tasklight.config import AppConfig, ConfigWatcher, load_config, save_config
 from tasklight.model import AgentStateModel
 from tasklight.overlay import OverlayWidget
 from tasklight.server import HookServer
@@ -41,6 +41,19 @@ def run(config_path: Path) -> int:
     overlay = OverlayWidget(model, cfg)
     context_menu = build_context_menu(overlay)
     overlay.set_context_menu(context_menu)
+
+    def _persist_dock_position(position: str) -> None:
+        current_cfg = load_config(config_path)
+        updated_cfg = AppConfig(
+            port=current_cfg.port,
+            dock=current_cfg.dock,
+            theme=current_cfg.theme,
+            timeouts=current_cfg.timeouts,
+        )
+        updated_cfg.dock.position = position
+        save_config(config_path, updated_cfg)
+
+    overlay.dock_position_changed.connect(_persist_dock_position)
 
     watcher = ConfigWatcher(config_path)
     watcher.config_changed.connect(overlay.apply_config)
