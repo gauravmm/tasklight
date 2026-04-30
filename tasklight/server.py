@@ -1,0 +1,55 @@
+"""HTTP hook server running in a background QThread."""
+
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from PyQt6.QtCore import QThread, pyqtSignal
+
+PORT = 57017
+_REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
+
+
+class _Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass  # silence default stderr logging
+
+    def do_POST(self):
+        if self.path != "/hook":
+            self._respond(404)
+            return
+
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        self._respond(204)  # respond immediately before any processing
+
+        try:
+            payload = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            return
+
+        if not _REQUIRED_KEYS.issubset(payload):
+            return
+
+        self.server.hook_server.event_received.emit(payload)
+
+    def _respond(self, code: int) -> None:
+        self.send_response(code)
+        self.end_headers()
+
+
+class HookServer(QThread):
+    event_received = pyqtSignal(dict)
+
+    def __init__(self, port: int = PORT, parent=None):
+        super().__init__(parent)
+        self._port = port
+        self._server: HTTPServer | None = None
+
+    def run(self) -> None:
+        self._server = HTTPServer(("127.0.0.1", self._port), _Handler)
+        self._server.hook_server = self  # back-reference for the handler
+        self._server.serve_forever()
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()

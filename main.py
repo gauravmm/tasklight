@@ -1,20 +1,17 @@
 """
-Tasklight – starter code.
+Tasklight – entry point.
 
-Features:
-  • A frameless, always-on-top overlay widget with a translucent background and
-    opaque text (WA_TranslucentBackground + custom paintEvent).
-  • A system tray icon.
-  • Both the overlay and the tray icon share the same context menu, which
-    includes an "About" action.
-
-Run:
-    python main.py
+Wires together:
+  • HookServer  – receives agent hook events on localhost:57017
+  • AgentStateModel – holds all agent state in memory
+  • OverlayWidget – displays raw text summary of current state (prototype)
+  • System tray icon
 """
 
 import sys
+import time
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -24,13 +21,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from tasklight.model import AgentState, AgentStateModel
+from tasklight.server import HookServer
+
 
 # ---------------------------------------------------------------------------
 # Shared context menu
 # ---------------------------------------------------------------------------
 
 def build_context_menu(parent: QWidget) -> QMenu:
-    """Return a context menu shared by the overlay and the tray icon."""
     menu = QMenu(parent)
 
     about_action = QAction("About", menu)
@@ -55,11 +54,10 @@ def show_about(parent: QWidget) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tray icon helper
+# Tray icon
 # ---------------------------------------------------------------------------
 
 def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
-    """Generate a simple coloured square as a placeholder tray icon."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -78,73 +76,136 @@ def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
 
 
 # ---------------------------------------------------------------------------
-# Overlay widget
+# Overlay widget – raw-text prototype
 # ---------------------------------------------------------------------------
 
+_STATE_LABEL = {
+    AgentState.THINKING:  "Thinking…",
+    AgentState.TOOL:      "Tool",
+    AgentState.APPROVAL:  "Waiting for approval",
+    AgentState.DONE:      "Done",
+}
+
+_BG   = QColor(30, 30, 30, 210)
+_FG   = QColor(230, 230, 230)
+_DIM  = QColor(130, 130, 130)
+_FONT = "monospace"
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 3600:
+        return f"{s // 60:02d}:{s % 60:02d}"
+    return f"{s // 3600:d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
 class OverlayWidget(QWidget):
-    """
-    A frameless, always-on-top widget with:
-      • a semi-transparent background (translucent fill)
-      • opaque text drawn on top
-    Right-clicking (or left-clicking) opens the shared context menu.
-    """
+    _PAD    = 10
+    _RADIUS = 10
+    _WIDTH  = 360
 
-    _BG_ALPHA = 160  # 0 = fully transparent, 255 = fully opaque background
-    _BG_COLOR = QColor(30, 30, 30, _BG_ALPHA)
-    _TEXT_COLOR = QColor(255, 255, 255, 255)  # fully opaque white text
-    _LABEL = "Tasklight"
-    _CORNER_RADIUS = 12
-
-    def __init__(self, context_menu: QMenu) -> None:
+    def __init__(self, model: AgentStateModel, context_menu: QMenu) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool,
         )
+        self._model = model
         self._context_menu = context_menu
 
-        # Enable translucent (ARGB) window background
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedWidth(self._WIDTH)
 
-        self.setFixedSize(220, 70)
+        model.dataChanged.connect(self._refresh)
+        model.rowsInserted.connect(self._refresh)
+        model.rowsRemoved.connect(self._refresh)
+
+        # 1 Hz clock refresh for elapsed timers.
+        self._clock = QTimer(self)
+        self._clock.setInterval(1000)
+        self._clock.timeout.connect(self.update)
+        self._clock.start()
+
+        self._refresh()
         self._move_to_bottom_right()
+
+    # ------------------------------------------------------------------
+    # Layout helpers
+    # ------------------------------------------------------------------
+
+    def _build_lines(self) -> list[tuple[str, QColor, bool]]:
+        """Return (text, colour, is_header) triples for the current state."""
+        records = [r for r in self._model.records() if not r.dismissed]
+        if not records:
+            return []
+
+        # Group by dirname, preserving insertion order.
+        groups: dict[str, list] = {}
+        for r in records:
+            groups.setdefault(r.dirname, []).append(r)
+
+        lines: list[tuple[str, QColor, bool]] = []
+        now = time.monotonic()
+        for dirname, recs in groups.items():
+            lines.append((f"/{dirname}", _DIM, True))
+            for r in recs:
+                elapsed = _fmt_elapsed(now - r.state_entered_at)
+                if r.state == AgentState.TOOL:
+                    label = f"Tool: {r.tool_name or '?'}"
+                else:
+                    label = _STATE_LABEL[r.state]
+                text = f"  {label:<32} {elapsed:>8}"
+                lines.append((text, _FG, False))
+
+        return lines
+
+    def _refresh(self) -> None:
+        lines = self._build_lines()
+        fm = self.fontMetrics()
+        lh = fm.height() + 4
+        h = self._PAD * 2 + len(lines) * lh if lines else 0
+        self.setFixedHeight(max(h, 0))
+        self.setVisible(bool(lines))
+        self.update()
 
     # ------------------------------------------------------------------
     # Painting
     # ------------------------------------------------------------------
 
     def paintEvent(self, _event) -> None:  # noqa: N802
+        lines = self._build_lines()
+        if not lines:
+            return
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Translucent rounded background
-        painter.setBrush(self._BG_COLOR)
+        painter.setBrush(_BG)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(
-            self.rect(), self._CORNER_RADIUS, self._CORNER_RADIUS
-        )
+        painter.drawRoundedRect(self.rect(), self._RADIUS, self._RADIUS)
 
-        # Opaque text
-        painter.setPen(QPen(self._TEXT_COLOR))
-        font = QFont()
-        font.setPointSize(16)
-        font.setBold(True)
+        font = QFont(_FONT)
+        font.setPointSize(10)
         painter.setFont(font)
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._LABEL)
+
+        fm = painter.fontMetrics()
+        lh = fm.height() + 4
+        y = self._PAD + fm.ascent()
+
+        for text, color, _ in lines:
+            painter.setPen(QPen(color))
+            painter.drawText(self._PAD, y, text)
+            y += lh
 
         painter.end()
 
     # ------------------------------------------------------------------
-    # Context menu on any mouse button press
+    # Interaction
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         self._context_menu.exec(event.globalPosition().toPoint())
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _move_to_bottom_right(self) -> None:
         screen = QApplication.primaryScreen()
@@ -164,17 +225,21 @@ class OverlayWidget(QWidget):
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)  # keep alive when overlay is hidden
+    app.setQuitOnLastWindowClosed(False)
 
-    # Build the context menu; actions are parented to the menu itself.
+    model = AgentStateModel()
+
+    server = HookServer()
+    server.event_received.connect(model.apply_event)
+    server.start()
+
     context_menu = build_context_menu(None)
-    overlay = OverlayWidget(context_menu)
+    overlay = OverlayWidget(model, context_menu)
     context_menu.setParent(overlay)
     overlay.show()
 
-    # --- Tray icon ---
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        print("Warning: system tray is not available on this platform.")
+        print("Warning: system tray not available.")
     else:
         tray = QSystemTrayIcon(overlay)
         tray.setIcon(QIcon(_make_tray_icon_pixmap()))
@@ -188,6 +253,8 @@ def main() -> None:
             )
         )
         tray.show()
+
+    app.aboutToQuit.connect(server.stop)
 
     sys.exit(app.exec())
 
