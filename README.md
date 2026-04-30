@@ -27,30 +27,40 @@ Tasklight is early-stage and actively evolving. The full product/design notes li
 - Hot-reloaded YAML config
 - System tray menu
 
-## Requirements
+## Install and run
 
-- Python `>=3.14` as currently declared in [pyproject.toml](pyproject.toml)
-- `uv` recommended for running the app
-- Linux or Windows
+### Windows — pre-built executable
 
-## Install
+Download `tasklight.exe` from the [Actions](../../actions) tab (pick the latest `windows-exe` artifact from a `v*` tag build) and run it directly — no Python required.
+
+### Python — uvx (recommended)
+
+Download the `.whl` from the [Actions](../../actions) tab (the `linux-wheel` artifact), then run it with `uvx`:
+
+```bash
+uvx --from ./tasklight-*.whl tasklight
+```
+
+Or install it into a persistent tool environment:
+
+```bash
+uv tool install ./tasklight-*.whl
+tasklight
+```
+
+### Python — from source
+
+Requires Python `>=3.14` and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-```
-
-If you are not using `uv`, install the dependencies from [pyproject.toml](pyproject.toml) or [requirements.txt](requirements.txt).
-
-## Run
-
-```bash
-uv run python main.py
+uv run tasklight
 ```
 
 To use a different config path:
 
 ```bash
-uv run python main.py --config PATH
+uv run tasklight --config PATH
 ```
 
 ## Manual Testing
@@ -220,13 +230,14 @@ Supported events:
 
 ```text
 tasklight/
-├── main.py
+├── tasklight.spec          # PyInstaller build spec
 ├── spec/
 │   └── DESIGN.md
 ├── tests/
 │   └── manual.sh
 └── tasklight/
-    ├── app.py
+    ├── __main__.py         # entry point (python -m tasklight)
+    ├── app.py              # bootstrap, cli() entry point
     ├── config.py
     ├── dialogs.py
     ├── model.py
@@ -252,9 +263,9 @@ tasklight/
 Useful commands:
 
 ```bash
-uv run python main.py
-uv run python main.py --config PATH
-uv run python -m py_compile main.py tasklight/*.py tasklight/overlay/*.py
+uv run tasklight
+uv run tasklight --config PATH
+uv run python -m py_compile tasklight/*.py tasklight/overlay/*.py
 bash tests/manual.sh
 ```
 
