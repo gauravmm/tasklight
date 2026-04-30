@@ -1,6 +1,8 @@
 """HTTP hook server running in a background QThread."""
 
+import ipaddress
 import json
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -9,12 +11,29 @@ from PyQt6.QtCore import QThread, pyqtSignal
 PORT = 57017
 _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
 
+# On Windows, accept loopback and WSL2's NAT subnet in addition to loopback.
+_ALLOWED_NETWORKS = [ipaddress.ip_network("127.0.0.0/8")]
+if sys.platform == "win32":
+    _ALLOWED_NETWORKS.append(ipaddress.ip_network("172.16.0.0/12"))
+
+
+def _is_allowed(addr: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(addr)
+        return any(ip in net for net in _ALLOWED_NETWORKS)
+    except ValueError:
+        return False
+
 
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # silence default stderr logging
 
     def do_GET(self):
+        if not _is_allowed(self.client_address[0]):
+            self._respond(403)
+            return
+
         parsed = urlparse(self.path)
         if parsed.path != "/hook":
             self._respond(404)
@@ -47,6 +66,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.server.hook_server.event_received.emit(payload)
 
     def do_POST(self):
+        if not _is_allowed(self.client_address[0]):
+            self._respond(403)
+            return
+
         if self.path != "/hook":
             self._respond(404)
             return
@@ -79,8 +102,9 @@ class HookServer(QThread):
         self._server: HTTPServer | None = None
 
     def run(self) -> None:
-        self._server = HTTPServer(("127.0.0.1", self._port), _Handler)
-        self._server.hook_server = self  # back-reference for the handler
+        bind = "0.0.0.0" if sys.platform == "win32" else "127.0.0.1"
+        self._server = HTTPServer((bind, self._port), _Handler)
+        self._server.hook_server = self
         self._server.serve_forever()
 
     def stop(self) -> None:

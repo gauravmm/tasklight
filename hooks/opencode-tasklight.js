@@ -1,4 +1,19 @@
-const TASKLIGHT_URL = process.env.TASKLIGHT_URL || "http://127.0.0.1:57017/hook";
+import { readFileSync } from "fs";
+
+const PORT = 57017;
+
+function resolveUrls() {
+  if (process.env.TASKLIGHT_URL) return [process.env.TASKLIGHT_URL];
+  if (process.env.WSL_DISTRO_NAME) {
+    try {
+      const match = readFileSync("/etc/resolv.conf", "utf8").match(/^nameserver\s+(\S+)/m);
+      if (match) return [`http://${match[1]}:${PORT}/hook`, `http://127.0.0.1:${PORT}/hook`];
+    } catch {}
+  }
+  return [`http://127.0.0.1:${PORT}/hook`];
+}
+
+const TASKLIGHT_URLS = resolveUrls();
 
 function firstString(...values) {
   for (const value of values) {
@@ -24,14 +39,15 @@ function sessionIdFrom(event, fallbackCwd) {
 }
 
 async function post(payload) {
-  try {
-    await fetch(TASKLIGHT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Tasklight should never break the agent.
+  for (const url of TASKLIGHT_URLS) {
+    try {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return;
+    } catch {}
   }
 }
 
