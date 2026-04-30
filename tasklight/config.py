@@ -1,0 +1,103 @@
+"""Configuration dataclasses, YAML loader, and hot-reload watcher."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+from PyQt6.QtCore import QFileSystemWatcher, QObject, pyqtSignal
+
+
+@dataclass
+class DockConfig:
+    position: str = "BR"   # TL|TC|TR|ML|MR|BL|BC|BR
+    margin: int = 16
+    width: int = 360
+
+
+@dataclass
+class ThemeConfig:
+    background: str = "#1e1e1e"
+    background_alpha: float = 0.85
+    foreground: str = "#e8e8e8"
+    dimmed: str = "#888888"
+    accent_spinner: str = "#5599ff"
+    accent_done: str = "#44cc77"
+    accent_approval: str = "#ff4444"
+    approval_row_bg: str = "#3a2800"
+    font_family: str = "monospace"
+    font_size_px: int = 13
+    corner_radius: int = 10
+    spinner: str = "braille"   # claude | braille | opencode
+
+
+@dataclass
+class TimeoutsConfig:
+    done_auto_remove_s: int = 0
+    exit_grace_s: int = 30
+
+
+@dataclass
+class AppConfig:
+    port: int = 57017
+    dock: DockConfig = field(default_factory=DockConfig)
+    theme: ThemeConfig = field(default_factory=ThemeConfig)
+    timeouts: TimeoutsConfig = field(default_factory=TimeoutsConfig)
+
+
+def _merge(dataclass_instance, mapping: dict) -> None:
+    """Shallow-merge dict keys into a dataclass, ignoring unknown keys."""
+    for key, value in mapping.items():
+        if hasattr(dataclass_instance, key):
+            setattr(dataclass_instance, key, value)
+
+
+def load_config(path: Path) -> AppConfig:
+    cfg = AppConfig()
+    if not path.exists():
+        return cfg
+    with path.open() as fh:
+        raw = yaml.safe_load(fh) or {}
+    _merge(cfg, {k: v for k, v in raw.items() if k not in ("dock", "theme", "timeouts")})
+    if "dock" in raw and isinstance(raw["dock"], dict):
+        _merge(cfg.dock, raw["dock"])
+    if "theme" in raw and isinstance(raw["theme"], dict):
+        _merge(cfg.theme, raw["theme"])
+    if "timeouts" in raw and isinstance(raw["timeouts"], dict):
+        _merge(cfg.timeouts, raw["timeouts"])
+    return cfg
+
+
+class ConfigWatcher(QObject):
+    config_changed = pyqtSignal(object)   # emits AppConfig
+
+    def __init__(self, path: Path, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._path = path
+        self._watcher = QFileSystemWatcher(self)
+        if path.exists():
+            self._watcher.addPath(str(path))
+        # Watch the parent directory so we catch atomic-save creates.
+        self._watcher.addPath(str(path.parent))
+        self._watcher.fileChanged.connect(self._on_changed)
+        self._watcher.directoryChanged.connect(self._on_dir_changed)
+
+    def _reload(self) -> None:
+        try:
+            self.config_changed.emit(load_config(self._path))
+        except Exception as exc:
+            print(f"[config] parse error: {exc}", file=sys.stderr)
+
+    def _on_changed(self) -> None:
+        # Re-add after atomic save (editor replaced the inode).
+        if str(self._path) not in self._watcher.files() and self._path.exists():
+            self._watcher.addPath(str(self._path))
+        self._reload()
+
+    def _on_dir_changed(self) -> None:
+        # File may have been created for the first time.
+        if self._path.exists() and str(self._path) not in self._watcher.files():
+            self._watcher.addPath(str(self._path))
+            self._reload()

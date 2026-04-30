@@ -2,16 +2,22 @@
 Tasklight – entry point.
 
 Wires together:
-  • HookServer  – receives agent hook events on localhost:57017
+  • HookServer     – receives agent hook events on localhost:{port}
   • AgentStateModel – holds all agent state in memory
-  • OverlayWidget – displays raw text summary of current state (prototype)
+  • ConfigWatcher  – hot-reloads tasklight.yaml
+  • OverlayWidget  – displays agent state as raw text (prototype)
   • System tray icon
+
+Usage:
+    python main.py [--config PATH]   (default: ./tasklight.yaml)
 """
 
+import argparse
 import os
 import sys
 import time
 import traceback
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
@@ -23,6 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from tasklight.config import AppConfig, ConfigWatcher, load_config
 from tasklight.model import AgentState, AgentStateModel
 from tasklight.server import HookServer
 
@@ -101,11 +108,6 @@ _STATE_LABEL = {
     AgentState.DONE:     "Done",
 }
 
-_BG   = QColor(30, 30, 30, 210)
-_FG   = QColor(230, 230, 230)
-_DIM  = QColor(130, 130, 130)
-_FONT = "monospace"
-
 
 def _fmt_elapsed(seconds: float) -> str:
     s = int(seconds)
@@ -114,22 +116,28 @@ def _fmt_elapsed(seconds: float) -> str:
     return f"{s // 3600:d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
-class OverlayWidget(QWidget):
-    _PAD    = 10
-    _RADIUS = 10
-    _WIDTH  = 360
+def _hex(color_str: str, alpha: float = 1.0) -> QColor:
+    c = QColor(color_str)
+    c.setAlphaF(alpha)
+    return c
 
-    def __init__(self, model: AgentStateModel, context_menu: QMenu) -> None:
+
+class OverlayWidget(QWidget):
+    _PAD = 10
+
+    def __init__(self, model: AgentStateModel, cfg: AppConfig, context_menu: QMenu) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint,
         )
         self._model = model
         self._context_menu = context_menu
+        self._cfg = cfg
+        self._update_colors()
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.setFixedWidth(self._WIDTH)
+        self.setFixedWidth(cfg.dock.width)
 
         model.dataChanged.connect(self._refresh)
         model.rowsInserted.connect(self._refresh)
@@ -142,40 +150,55 @@ class OverlayWidget(QWidget):
         self._clock.start()
 
         self._refresh()
-        self._move_to_bottom_right()
+        self._move_to_dock()
+
+    def apply_config(self, cfg: AppConfig) -> None:
+        self._cfg = cfg
+        self._update_colors()
+        self.setFixedWidth(cfg.dock.width)
+        self._refresh()
+        self._move_to_dock()
+
+    def _update_colors(self) -> None:
+        t = self._cfg.theme
+        self._c_bg          = _hex(t.background, t.background_alpha)
+        self._c_fg          = _hex(t.foreground)
+        self._c_dim         = _hex(t.dimmed)
+        self._c_approval_bg = _hex(t.approval_row_bg)
 
     # ------------------------------------------------------------------
     # Layout helpers
     # ------------------------------------------------------------------
 
-    def _build_lines(self) -> list[tuple[str, QColor, bool]]:
-        """Return (text, colour, is_header) triples for the current state."""
+    def _build_lines(self) -> list[tuple[str, bool]]:
+        """Return (text, is_approval) pairs for the current state."""
         records = [r for r in self._model.records() if not r.dismissed]
         if not records:
-            return [("  No agents", _DIM, False)]
+            return [("  No agents", False)]
 
-        # Group by dirname, preserving insertion order.
         groups: dict[str, list] = {}
         for r in records:
             groups.setdefault(r.dirname, []).append(r)
 
-        lines: list[tuple[str, QColor, bool]] = []
+        lines: list[tuple[str, bool]] = []
         now = time.monotonic()
         for dirname, recs in groups.items():
-            lines.append((f"/{dirname}", _DIM, True))
+            lines.append((f"/{dirname}", False))
             for r in recs:
                 elapsed = _fmt_elapsed(now - r.started_at)
                 if r.state == AgentState.TOOL:
                     label = f"Tool: {r.tool_name or '?'}"
                 else:
                     label = _STATE_LABEL[r.state]
-                text = f"  {label:<32} {elapsed:>8}"
-                lines.append((text, _FG, False))
+                lines.append((f"  {label:<32} {elapsed:>8}", r.state == AgentState.APPROVAL))
 
         return lines
 
     def _refresh(self) -> None:
         lines = self._build_lines()
+        t = self._cfg.theme
+        font = QFont(t.font_family)
+        font.setPixelSize(t.font_size_px)
         fm = self.fontMetrics()
         lh = fm.height() + 4
         self.setFixedHeight(self._PAD * 2 + len(lines) * lh)
@@ -195,24 +218,31 @@ class OverlayWidget(QWidget):
         if not lines:
             return
 
+        t = self._cfg.theme
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        painter.setBrush(_BG)
+        # Window background.
+        painter.setBrush(self._c_bg)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.rect(), self._RADIUS, self._RADIUS)
+        painter.drawRoundedRect(self.rect(), t.corner_radius, t.corner_radius)
 
-        font = QFont(_FONT)
-        font.setPointSize(10)
+        font = QFont(t.font_family)
+        font.setPixelSize(t.font_size_px)
         painter.setFont(font)
 
         fm = painter.fontMetrics()
         lh = fm.height() + 4
-        y = self._PAD + fm.ascent()
+        y = self._PAD
 
-        for text, color, _ in lines:
-            painter.setPen(QPen(color))
-            painter.drawText(self._PAD, y, text)
+        for text, is_approval in lines:
+            if is_approval:
+                row_rect = self.rect().adjusted(0, y, 0, -(self.height() - y - lh))
+                painter.fillRect(row_rect, self._c_approval_bg)
+
+            is_header = text.startswith("/")
+            painter.setPen(QPen(self._c_dim if is_header else self._c_fg))
+            painter.drawText(self._PAD, y + fm.ascent(), text)
             y += lh
 
         painter.end()
@@ -225,16 +255,24 @@ class OverlayWidget(QWidget):
         if a0 is not None and a0.button() == Qt.MouseButton.RightButton:
             self._context_menu.popup(a0.globalPosition().toPoint())
 
-    def _move_to_bottom_right(self) -> None:
+    def _move_to_dock(self) -> None:
         screen = QApplication.primaryScreen()
         if screen is None:
             return
         geo = screen.availableGeometry()
-        margin = 20
-        self.move(
-            geo.right() - self.width() - margin,
-            geo.bottom() - self.height() - margin,
-        )
+        m = self._cfg.dock.margin
+        pos = self._cfg.dock.position
+        w, h = self.width(), self.height()
+
+        x = {"L": geo.left() + m,
+             "C": geo.center().x() - w // 2,
+             "R": geo.right() - w - m}[pos[1] if len(pos) == 2 else "R"]
+
+        y = {"T": geo.top() + m,
+             "M": geo.center().y() - h // 2,
+             "B": geo.bottom() - h - m}[pos[0]]
+
+        self.move(x, y)
 
 
 # ---------------------------------------------------------------------------
@@ -247,21 +285,35 @@ def main() -> None:
         traceback.print_exception(exc_type, exc_value, exc_tb)
     sys.excepthook = _excepthook
 
+    parser = argparse.ArgumentParser(description="Tasklight agent monitor")
+    parser.add_argument(
+        "--config", "-c",
+        type=Path,
+        default=Path("tasklight.yaml"),
+        metavar="PATH",
+        help="Config file (default: ./tasklight.yaml)",
+    )
+    args = parser.parse_args()
+
     # Force XCB (X11/XWayland) — Wayland lacks global coords and system tray.
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
+    cfg = load_config(args.config)
     model = AgentStateModel()
 
-    server = HookServer()
+    server = HookServer(port=cfg.port)
     server.event_received.connect(model.apply_event)
     server.start()
 
-    overlay = OverlayWidget(model, QMenu())
+    overlay = OverlayWidget(model, cfg, QMenu())
     context_menu = build_context_menu(overlay)
     overlay._context_menu = context_menu
+
+    watcher = ConfigWatcher(args.config)
+    watcher.config_changed.connect(overlay.apply_config)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("Warning: system tray not available.", file=sys.stderr)
