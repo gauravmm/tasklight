@@ -2,6 +2,7 @@ import os
 import sys
 
 if hasattr(sys, "_MEIPASS") and sys.platform == "win32":
-    # qwindows.dll needs Qt6Gui/Qt6Core etc., which PyInstaller puts in
-    # _MEIPASS. Windows won't find them there without this PATH entry.
-    os.environ["PATH"] = sys._MEIPASS + os.pathsep + os.environ.get("PATH", "")
+    # Windows 8+ no longer uses PATH for DLL resolution (security change).
+    # os.add_dll_directory() is the correct way to make qwindows.dll find
+    # Qt6Gui, Qt6Core, etc., which PyInstaller places in _MEIPASS.
+    os.add_dll_directory(sys._MEIPASS)
