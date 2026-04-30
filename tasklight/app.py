@@ -29,7 +29,8 @@ def _install_excepthook() -> None:
 def run(config_path: Path) -> int:
     _install_excepthook()
 
-    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+    if sys.platform != "win32":
+        os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)

@@ -27,7 +27,13 @@ Tasklight is a tiny product that your agent can customize to your heart's desire
 
 ## Install and run
 
-Download the `.whl` from the [Actions](../../actions) tab (the `linux-wheel` artifact from a `v*` tag build), then run it with `uvx`:
+### Windows — pre-built executable
+
+Download `tasklight.exe` from the [Actions](../../actions) tab (pick the latest `windows-exe` artifact from a `v*` tag build) and run it directly — no Python required.
+
+### Python — uvx (recommended)
+
+Download the `.whl` from the [Actions](../../actions) tab (the `linux-wheel` artifact), then run it with `uvx`:
 
 ```bash
 uvx --from ./tasklight-*.whl tasklight
