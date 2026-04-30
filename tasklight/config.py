@@ -54,9 +54,29 @@ def _merge(dataclass_instance, mapping: dict) -> None:
             setattr(dataclass_instance, key, value)
 
 
+def _write_defaults(path: Path) -> None:
+    """Write a default config file. Skips if the parent directory doesn't exist."""
+    if not path.parent.exists():
+        return
+    with path.open("w") as fh:
+        yaml.dump(
+            {
+                "port": AppConfig.port,
+                "dock": {k: v for k, v in DockConfig().__dict__.items()},
+                "theme": {k: v for k, v in ThemeConfig().__dict__.items()},
+                "timeouts": {k: v for k, v in TimeoutsConfig().__dict__.items()},
+            },
+            fh,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+    print(f"[config] wrote defaults to {path}", file=sys.stderr)
+
+
 def load_config(path: Path) -> AppConfig:
     cfg = AppConfig()
     if not path.exists():
+        _write_defaults(path)
         return cfg
     with path.open() as fh:
         raw = yaml.safe_load(fh) or {}

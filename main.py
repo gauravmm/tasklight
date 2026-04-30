@@ -103,9 +103,9 @@ def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
 
 _STATE_LABEL = {
     AgentState.THINKING: "Thinking…",
-    AgentState.TOOL:     "Tool",
+    AgentState.TOOL: "Tool",
     AgentState.APPROVAL: "Waiting for approval",
-    AgentState.DONE:     "Done",
+    AgentState.DONE: "Done",
 }
 
 
@@ -125,7 +125,9 @@ def _hex(color_str: str, alpha: float = 1.0) -> QColor:
 class OverlayWidget(QWidget):
     _PAD = 10
 
-    def __init__(self, model: AgentStateModel, cfg: AppConfig, context_menu: QMenu) -> None:
+    def __init__(
+        self, model: AgentStateModel, cfg: AppConfig, context_menu: QMenu
+    ) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint,
@@ -161,9 +163,9 @@ class OverlayWidget(QWidget):
 
     def _update_colors(self) -> None:
         t = self._cfg.theme
-        self._c_bg          = _hex(t.background, t.background_alpha)
-        self._c_fg          = _hex(t.foreground)
-        self._c_dim         = _hex(t.dimmed)
+        self._c_bg = _hex(t.background, t.background_alpha)
+        self._c_fg = _hex(t.foreground)
+        self._c_dim = _hex(t.dimmed)
         self._c_approval_bg = _hex(t.approval_row_bg)
 
     # ------------------------------------------------------------------
@@ -190,7 +192,9 @@ class OverlayWidget(QWidget):
                     label = f"Tool: {r.tool_name or '?'}"
                 else:
                     label = _STATE_LABEL[r.state]
-                lines.append((f"  {label:<32} {elapsed:>8}", r.state == AgentState.APPROVAL))
+                lines.append(
+                    (f"  {label:<32} {elapsed:>8}", r.state == AgentState.APPROVAL)
+                )
 
         return lines
 
@@ -264,13 +268,17 @@ class OverlayWidget(QWidget):
         pos = self._cfg.dock.position
         w, h = self.width(), self.height()
 
-        x = {"L": geo.left() + m,
-             "C": geo.center().x() - w // 2,
-             "R": geo.right() - w - m}[pos[1] if len(pos) == 2 else "R"]
+        x = {
+            "L": geo.left() + m,
+            "C": geo.center().x() - w // 2,
+            "R": geo.right() - w - m,
+        }[pos[1] if len(pos) == 2 else "R"]
 
-        y = {"T": geo.top() + m,
-             "M": geo.center().y() - h // 2,
-             "B": geo.bottom() - h - m}[pos[0]]
+        y = {
+            "T": geo.top() + m,
+            "M": geo.center().y() - h // 2,
+            "B": geo.bottom() - h - m,
+        }[pos[0]]
 
         self.move(x, y)
 
@@ -283,11 +291,13 @@ class OverlayWidget(QWidget):
 def main() -> None:
     def _excepthook(exc_type, exc_value, exc_tb):
         traceback.print_exception(exc_type, exc_value, exc_tb)
+
     sys.excepthook = _excepthook
 
     parser = argparse.ArgumentParser(description="Tasklight agent monitor")
     parser.add_argument(
-        "--config", "-c",
+        "--config",
+        "-c",
         type=Path,
         default=Path("tasklight.yaml"),
         metavar="PATH",
