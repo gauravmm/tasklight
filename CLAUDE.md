@@ -30,10 +30,14 @@ curl POST /hook
 ```
 
 **Key files:**
-- `main.py` — wiring: instantiates all components, builds the Qt app, owns the tray icon and `OverlayWidget`
+- `main.py` — thin CLI entry point; delegates to `tasklight.app.run()`
+- `tasklight/app.py` — composition root: builds the Qt app, server, tray, watcher, and overlay
 - `tasklight/model.py` — `AgentRecord` dataclass + `AgentStateModel(QAbstractListModel)`; all state is in-memory, no persistence
 - `tasklight/server.py` — `HookServer(QThread)`; responds 204 immediately, then emits signal
 - `tasklight/config.py` — `AppConfig` dataclass hierarchy, YAML loader, `ConfigWatcher(QObject)` using `QFileSystemWatcher` for hot-reload
+- `tasklight/overlay/widget.py` — `OverlayWidget(QWidget)`; painting, interaction, and docking
+- `tasklight/overlay/view_model.py` — pure row-building logic for expanded and collapsed groups
+- `tasklight/tray.py` / `tasklight/dialogs.py` — tray menu construction and small dialogs
 
 **Config hot-reload:** `ConfigWatcher` watches both the file and its parent directory (to catch atomic-save inode replacement). On change it emits `config_changed(AppConfig)`, wired to `OverlayWidget.apply_config()`. Port changes require restart; everything else is live.
 

@@ -24,7 +24,6 @@ class ThemeConfig:
     foreground: str = "#e8e8e8"
     dimmed: str = "#888888"
     animate_spinners: bool = True
-    accent_spinner: str = "#5599ff"
     accent_done: str = "#44cc77"
     accent_approval: str = "#ff4444"
     approval_row_bg: str = "#3a2800"

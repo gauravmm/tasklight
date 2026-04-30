@@ -332,7 +332,6 @@ theme:
   foreground: "#e8e8e8"
   dimmed: "#888888"
   animate_spinners: true
-  accent_spinner: "#5599ff"
   accent_done: "#44cc77"
   accent_approval: "#ff4444"
   approval_row_bg: "#3a2800"
@@ -389,18 +388,25 @@ Theme changes take effect immediately; port changes require restart (shown as a 
 
 ```
 tasklight/
-├── main.py                  # entry point: QApplication + wiring
+├── main.py                  # thin CLI entry point
 ├── config.yaml              # user config (hot-reloaded)
 ├── pyproject.toml
 │
 ├── tasklight/
 │   ├── __init__.py
+│   ├── app.py               # QApplication composition root
 │   ├── model.py             # AgentRecord, AgentState, AgentStateModel
 │   ├── server.py            # HookServer (QThread + HTTP listener)
 │   ├── config.py            # AppConfig dataclass, YAML loader, ConfigWatcher
-│   ├── overlay.py           # OverlayWidget, DockManager
-│   ├── delegate.py          # SpinnerDelegate, row painting
-│   └── platform_utils.py   # Windows SetWindowPos shim, Wayland detection
+│   ├── dialogs.py           # About + quit confirmation dialogs
+│   ├── tray.py              # Tray icon and shared context menu
+│   └── overlay/
+│       ├── __init__.py
+│       ├── widget.py        # OverlayWidget
+│       ├── view_model.py    # Row construction and collapsed-group summaries
+│       ├── layout.py        # Shared row geometry and hit testing
+│       ├── presentation.py  # Glyph, color, and label policy
+│       └── types.py         # Overlay row/layout dataclasses
 │
 └── spec/
     └── DESIGN.md
