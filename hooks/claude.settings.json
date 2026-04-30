@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=start\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=start\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$CLAUDE_TOOL_NAME\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$(printf '%s' \"$INPUT\" | jq -r '.tool_name // empty')\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=stop\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=stop\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$CLAUDE_SESSION_ID\" --data-urlencode \"cwd=$PWD\" --data-urlencode \"event=exit\" http://127.0.0.1:57017/hook 2>/dev/null || true"
+            "command": "INPUT=$(cat); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty')\" --data-urlencode \"cwd=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty')\" --data-urlencode \"event=exit\" http://127.0.0.1:57017/hook 2>/dev/null || true"
           }
         ]
       }

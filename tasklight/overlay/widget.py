@@ -194,6 +194,7 @@ class OverlayWidget(QWidget):
         self._dragging = False
 
         if was_dragging:
+            self._cursor_pos = None
             if snap_enabled:
                 position = self._snap_to_nearest_dock(
                     drag_screen,
@@ -230,9 +231,8 @@ class OverlayWidget(QWidget):
         self.update()
 
     def leaveEvent(self, _event) -> None:  # noqa: N802
-        if not self._cfg.theme.use_system_cursor:
-            self._cursor_pos = None
-            self.update()
+        self._cursor_pos = None
+        self.update()
 
     def _font(self) -> QFont:
         font = QFont(self._cfg.theme.font_family)

@@ -82,9 +82,7 @@ They all forward lifecycle/tool events to Tasklight’s local hook server.
 
 File: [hooks/claude.settings.json](hooks/claude.settings.json)
 
-Requires: `curl` on `PATH`.
-
-Uses Claude Code's built-in env vars: `$CLAUDE_SESSION_ID`, `$CLAUDE_TOOL_NAME`, and `$PWD`.
+Requires: `curl` and `jq` on `PATH`. (Claude Code passes data via stdin JSON; `jq` extracts `session_id`, `cwd`, and `tool_name`.)
 
 Install: merge the `hooks` block into either:
 
