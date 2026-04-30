@@ -4,19 +4,15 @@ import sys
 if hasattr(sys, "_MEIPASS") and sys.platform == "win32":
     meipass = sys._MEIPASS
 
-    # Qt DLLs (Qt6Core, Qt6Gui, …) land directly in _MEIPASS when bundled by
-    # PyInstaller, but PyQt6's own __init__.py expects them in Qt6/bin and
-    # calls os.add_dll_directory() for that path, which no longer exists in
-    # the frozen layout. Add both locations so whichever applies is covered.
+    # Qt DLLs land in PyQt6/Qt6/bin/ (confirmed from bundle layout).
+    # os.add_dll_directory() is required on Windows 8+ because PATH is no
+    # longer used for DLL resolution; qwindows.dll needs Qt6Gui, Qt6Core, etc.
     os.add_dll_directory(meipass)
-    for candidate in (
-        os.path.join(meipass, "PyQt6", "Qt6", "bin"),
-        os.path.join(meipass, "PyQt6", "Qt6"),
-    ):
-        if os.path.isdir(candidate):
-            os.add_dll_directory(candidate)
+    qt_bin = os.path.join(meipass, "PyQt6", "Qt6", "bin")
+    if os.path.isdir(qt_bin):
+        os.add_dll_directory(qt_bin)
 
-    # Pin the platform plugin path so Qt doesn't search relative to the exe.
+    # Pin platform plugin path so Qt doesn't search relative to the exe.
     platforms = os.path.join(meipass, "PyQt6", "Qt6", "plugins", "platforms")
     if os.path.isdir(platforms):
         os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platforms

@@ -1,10 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import PyQt6
+
+# PyInstaller's PyQt6 hook does not reliably collect platform plugins.
+# Collect them explicitly so qwindows.dll / libqxcb.so are bundled.
+_qt6_plugins = os.path.join(os.path.dirname(PyQt6.__file__), "Qt6", "plugins")
+_plugin_datas = [
+    (os.path.join(_qt6_plugins, sub), f"PyQt6/Qt6/plugins/{sub}")
+    for sub in ("platforms", "styles")
+    if os.path.isdir(os.path.join(_qt6_plugins, sub))
+]
 
 a = Analysis(
     ['tasklight/__main__.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=_plugin_datas,
     hiddenimports=['PyQt6.sip', 'pkgutil'],
     hookspath=[],
     hooksconfig={},
