@@ -20,8 +20,10 @@ from tasklight.overlay.view_model import build_rows
 class OverlayColors:
     background: QColor
     foreground: QColor
-    dimmed: QColor
-    approval_background: QColor
+    dirname_fg: QColor
+    hostname_fg: QColor
+    approval_bg: QColor
+    done_bg: QColor
 
 
 class OverlayWidget(QWidget):
@@ -121,14 +123,17 @@ class OverlayWidget(QWidget):
         for layout_row in layout.rows:
             row = layout_row.row
             status = row.summary if isinstance(row, HeaderRow) else row
-            if status is not None and status.state == AgentState.APPROVAL:
+            if status is not None:
                 row_rect = self.rect().adjusted(
                     0,
                     layout_row.top,
                     0,
                     -(self.height() - layout_row.top - layout_row.height),
                 )
-                painter.fillRect(row_rect, self._colors.approval_background)
+                if status.state == AgentState.APPROVAL:
+                    painter.fillRect(row_rect, self._colors.approval_bg)
+                elif status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0:
+                    painter.fillRect(row_rect, self._colors.done_bg)
 
             baseline = layout_row.top + painter.fontMetrics().ascent()
             if isinstance(row, HeaderRow):
@@ -136,7 +141,7 @@ class OverlayWidget(QWidget):
             else:
                 self._paint_agent_row(painter, row, baseline, layout)
 
-        if not self._cfg.theme.use_system_cursor:
+        if not self._cfg.theme.system_cursor:
             self._draw_cursor(painter)
         painter.end()
 
@@ -162,7 +167,7 @@ class OverlayWidget(QWidget):
         if event is None:
             return
 
-        if not self._cfg.theme.use_system_cursor:
+        if not self._cfg.theme.system_cursor:
             self._cursor_pos = event.position()
             self._cursor_hide.start()
             self.update()
@@ -229,7 +234,7 @@ class OverlayWidget(QWidget):
 
     def enterEvent(self, event) -> None:  # noqa: N802
         if (
-            not self._cfg.theme.use_system_cursor
+            not self._cfg.theme.system_cursor
             and event is not None
             and hasattr(event, "position")
         ):
@@ -242,7 +247,7 @@ class OverlayWidget(QWidget):
 
     def _font(self) -> QFont:
         font = QFont(self._cfg.theme.font_family)
-        font.setPixelSize(self._cfg.theme.font_size_px)
+        font.setPixelSize(self._cfg.theme.font_size)
         return font
 
     def _layout(self, fm: QFontMetrics) -> OverlayLayout:
@@ -254,8 +259,10 @@ class OverlayWidget(QWidget):
         return OverlayColors(
             background=hex_color(theme.background, theme.background_alpha),
             foreground=hex_color(theme.foreground),
-            dimmed=hex_color(theme.dimmed),
-            approval_background=hex_color(theme.approval_row_bg),
+            dirname_fg=hex_color(theme.dirname_fg),
+            hostname_fg=hex_color(theme.hostname_fg),
+            approval_bg=hex_color(theme.approval_bg),
+            done_bg=hex_color(theme.done_bg) if theme.done_bg else QColor(0, 0, 0, 0),
         )
 
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
@@ -287,7 +294,7 @@ class OverlayWidget(QWidget):
         x = self._paint_hostname_prefix(painter, fm, row.hostname, x, baseline)
 
         if row.summary is None:
-            painter.setPen(QPen(self._colors.dimmed))
+            painter.setPen(QPen(self._colors.dirname_fg))
             painter.drawText(
                 x,
                 baseline,
@@ -306,7 +313,7 @@ class OverlayWidget(QWidget):
         label_x = glyph_x + metrics.glyph_width + metrics.text_gap
         label_width = elapsed_x - label_x - metrics.text_gap
 
-        painter.setPen(QPen(self._colors.dimmed))
+        painter.setPen(QPen(self._colors.dirname_fg))
         painter.drawText(x, baseline, dirname_text)
         glyph, glyph_color = glyph_for_state(
             row.summary.source,
@@ -319,7 +326,7 @@ class OverlayWidget(QWidget):
         painter.drawText(glyph_x, baseline, glyph)
         painter.setPen(QPen(self._colors.foreground))
         painter.drawText(label_x, baseline, elide(fm, row.summary.label, label_width))
-        painter.setPen(QPen(self._colors.dimmed))
+        painter.setPen(QPen(self._colors.dirname_fg))
         painter.drawText(elapsed_x, baseline, row.summary.elapsed)
 
     def _paint_hostname_prefix(
@@ -334,7 +341,7 @@ class OverlayWidget(QWidget):
         if not hostname:
             return x
         text = f"{hostname}:"
-        painter.setPen(QPen(hex_color(self._cfg.theme.hostname_color)))
+        painter.setPen(QPen(self._colors.hostname_fg))
         painter.drawText(x, baseline, text)
         return x + fm.horizontalAdvance(text)
 
@@ -373,7 +380,7 @@ class OverlayWidget(QWidget):
             baseline,
             elide(fm, row.label, metrics.label_width),
         )
-        painter.setPen(QPen(self._colors.dimmed))
+        painter.setPen(QPen(self._colors.dirname_fg))
         painter.drawText(elapsed_x, baseline, row.elapsed)
 
     def _draw_cursor(self, painter: QPainter) -> None:
@@ -393,8 +400,8 @@ class OverlayWidget(QWidget):
 
     def _apply_cursor_mode(self) -> None:
         self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.setMouseTracking(not self._cfg.theme.use_system_cursor)
-        if self._cfg.theme.use_system_cursor:
+        self.setMouseTracking(not self._cfg.theme.system_cursor)
+        if self._cfg.theme.system_cursor:
             self._cursor_pos = None
 
     def _toggle_group(self, row: HeaderRow) -> None:

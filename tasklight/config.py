@@ -22,15 +22,16 @@ class ThemeConfig:
     background: str = "#1e1e1e"
     background_alpha: float = 0.85
     foreground: str = "#e8e8e8"
-    dimmed: str = "#888888"
-    hostname_color: str = "#5599cc"
-    use_system_cursor: bool = True
+    dirname_fg: str = "#888888"
+    hostname_fg: str = "#5599cc"
+    system_cursor: bool = True
     animate_spinners: bool = True
-    accent_done: str = "#44cc77"
-    accent_approval: str = "#ff4444"
-    approval_row_bg: str = "#a47000"
+    done_fg: str = "#44cc77"
+    done_bg: str = ""
+    approval_fg: str = "#ff4444"
+    approval_bg: str = "#a47000"
     font_family: str = "monospace"
-    font_size_px: int = 13
+    font_size: int = 13
     corner_radius: int = 10
 
 
