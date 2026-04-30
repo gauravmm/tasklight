@@ -33,11 +33,7 @@ Download `tasklight.exe` from the [Actions](../../actions) tab (pick the latest 
 
 ### Python — uvx (recommended)
 
-Download the `.whl` from the [Actions](../../actions) tab (the `linux-wheel` artifact), then run it with `uvx`:
-
-```bash
-uvx --from ./tasklight-*.whl tasklight
-```
+TODO: One line command which downloads the latest release or `master` and runs that.
 
 Or install it into a persistent tool environment:
 
@@ -47,6 +43,8 @@ tasklight
 ```
 
 ## Hooks
+
+TODO: Mention somewhere that `RemoteForward 57017` (or cli equivalent) will allow you to show this over remote forwards.
 
 This repository includes ready-to-adapt hook files in [hooks/](hooks/) for:
 

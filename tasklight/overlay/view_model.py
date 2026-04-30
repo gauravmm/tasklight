@@ -31,25 +31,29 @@ def _summary_for_group(records: list[AgentRecord], now: float) -> GroupSummary:
 
 def build_rows(
     records: list[AgentRecord],
-    collapsed_groups: set[str],
+    collapsed_groups: set[tuple[str, str]],
     now: float | None = None,
 ) -> list[HeaderRow | AgentRow]:
     visible_records = [record for record in records if not record.dismissed]
     if not visible_records:
         return [AgentRow("", "", AgentState.DONE, "No agents", "")]
 
-    grouped_records: dict[str, list[AgentRecord]] = {}
+    has_remote = any(record.hostname for record in visible_records)
+
+    grouped_records: dict[tuple[str, str], list[AgentRecord]] = {}
     for record in visible_records:
-        grouped_records.setdefault(record.dirname, []).append(record)
+        grouped_records.setdefault((record.hostname, record.dirname), []).append(record)
 
     current_time = time.monotonic() if now is None else now
     rows: list[HeaderRow | AgentRow] = []
-    for dirname, group in grouped_records.items():
-        if dirname in collapsed_groups:
-            rows.append(HeaderRow(dirname, _summary_for_group(group, current_time)))
+    for (hostname, dirname), group in sorted(grouped_records.items()):
+        display_hostname = (hostname or "local") if has_remote else ""
+        group_key = (hostname, dirname)
+        if group_key in collapsed_groups:
+            rows.append(HeaderRow(dirname, _summary_for_group(group, current_time), display_hostname, group_key))
             continue
 
-        rows.append(HeaderRow(dirname))
+        rows.append(HeaderRow(dirname, hostname=display_hostname, group_key=group_key))
         for record in group:
             label = (
                 f"Tool: {record.tool_name or '?'}"

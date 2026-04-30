@@ -23,6 +23,7 @@ class ThemeConfig:
     background_alpha: float = 0.85
     foreground: str = "#e8e8e8"
     dimmed: str = "#888888"
+    hostname_color: str = "#5599cc"
     use_system_cursor: bool = True
     animate_spinners: bool = True
     accent_done: str = "#44cc77"

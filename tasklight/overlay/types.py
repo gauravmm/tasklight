@@ -28,6 +28,8 @@ class GroupSummary:
 class HeaderRow:
     dirname: str
     summary: GroupSummary | None = None
+    hostname: str = ""                      # display hostname; empty when all agents are local
+    group_key: tuple[str, str] = ("", "")   # (raw_hostname, dirname) for collapse tracking
 
 
 @dataclass(frozen=True)

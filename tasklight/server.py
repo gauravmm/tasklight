@@ -60,6 +60,7 @@ class _Handler(BaseHTTPRequestHandler):
             "session_id": session_id,
             "cwd": cwd,
             "event": event,
+            "hostname": first("hostname") or "",
             "data": {"tool_name": first("tool_name") or "tool"} if event == "tool_use" else {},
         }
 

@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { hostname } from "os";
 
 const PORT = 57017;
 
@@ -14,6 +15,7 @@ function resolveUrls() {
 }
 
 const TASKLIGHT_URLS = resolveUrls();
+const HOSTNAME = hostname();
 
 function firstString(...values) {
   for (const value of values) {
@@ -68,6 +70,7 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
           source: "opencode",
           session_id: currentSessionId,
           cwd,
+          hostname: HOSTNAME,
           event: "start",
           data: {},
         });
@@ -78,6 +81,7 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
           source: "opencode",
           session_id: currentSessionId,
           cwd,
+          hostname: HOSTNAME,
           event: "stop",
           data: {},
         });
@@ -88,6 +92,7 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
           source: "opencode",
           session_id: currentSessionId,
           cwd,
+          hostname: HOSTNAME,
           event: "exit",
           data: {},
         });
@@ -99,6 +104,7 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
         source: "opencode",
         session_id: currentSessionId,
         cwd,
+        hostname: HOSTNAME,
         event: "tool_use",
         data: {
           tool_name: firstString(input?.tool, input?.name) || "tool",
@@ -111,6 +117,7 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
         source: "opencode",
         session_id: currentSessionId,
         cwd,
+        hostname: HOSTNAME,
         event: "thinking",
         data: {},
       });

@@ -22,6 +22,7 @@ class AgentRecord:
     cwd: str
     dirname: str
     state: AgentState
+    hostname: str = ""
     tool_name: str | None = None
     state_entered_at: float = field(default_factory=time.monotonic)
     started_at: float = field(default_factory=time.monotonic)
@@ -103,6 +104,7 @@ class AgentStateModel(QAbstractListModel):
                 cwd=cwd,
                 dirname=os.path.basename(cwd) or cwd,
                 state=next_state,
+                hostname=payload.get("hostname") or "",
                 started_at=now,
                 state_entered_at=now,
             )

@@ -47,7 +47,7 @@ class OverlayWidget(QWidget):
         self._cfg = cfg
         self._frame = 0
         self._cursor_pos: QPointF | None = None
-        self._collapsed_groups: set[str] = set()
+        self._collapsed_groups: set[tuple[str, str]] = set()
         self._context_menu: QMenu | None = None
         self._pressed_row: HeaderRow | AgentRow | None = None
         self._press_global_pos: QPointF | None = None
@@ -217,7 +217,7 @@ class OverlayWidget(QWidget):
             return
 
         if isinstance(pressed_row, HeaderRow):
-            self._toggle_group(pressed_row.dirname)
+            self._toggle_group(pressed_row)
             return
 
         if (
@@ -283,12 +283,15 @@ class OverlayWidget(QWidget):
     ) -> None:
         fm = painter.fontMetrics()
         metrics = layout.metrics
+        x = metrics.pad
+        x = self._paint_hostname_prefix(painter, fm, row.hostname, x, baseline)
+
         if row.summary is None:
             painter.setPen(QPen(self._colors.dimmed))
             painter.drawText(
-                metrics.pad,
+                x,
                 baseline,
-                elide(fm, f"/{row.dirname}", metrics.content_right - metrics.pad),
+                elide(fm, f"/{row.dirname}", metrics.content_right - x),
             )
             return
 
@@ -296,15 +299,15 @@ class OverlayWidget(QWidget):
         dirname_text = elide(
             fm,
             f"/{row.dirname}",
-            max(metrics.em * 8, (elapsed_x - metrics.pad) // 3),
+            max(metrics.em * 8, (elapsed_x - x) // 3),
         )
         dirname_width = fm.horizontalAdvance(dirname_text)
-        glyph_x = metrics.pad + dirname_width + metrics.text_gap
+        glyph_x = x + dirname_width + metrics.text_gap
         label_x = glyph_x + metrics.glyph_width + metrics.text_gap
         label_width = elapsed_x - label_x - metrics.text_gap
 
         painter.setPen(QPen(self._colors.dimmed))
-        painter.drawText(metrics.pad, baseline, dirname_text)
+        painter.drawText(x, baseline, dirname_text)
         glyph, glyph_color = glyph_for_state(
             row.summary.source,
             row.summary.state,
@@ -318,6 +321,22 @@ class OverlayWidget(QWidget):
         painter.drawText(label_x, baseline, elide(fm, row.summary.label, label_width))
         painter.setPen(QPen(self._colors.dimmed))
         painter.drawText(elapsed_x, baseline, row.summary.elapsed)
+
+    def _paint_hostname_prefix(
+        self,
+        painter: QPainter,
+        fm: QFontMetrics,
+        hostname: str,
+        x: int,
+        baseline: int,
+    ) -> int:
+        """Paint 'hostname:' in hostname_color and return the new x position."""
+        if not hostname:
+            return x
+        text = f"{hostname}:"
+        painter.setPen(QPen(hex_color(self._cfg.theme.hostname_color)))
+        painter.drawText(x, baseline, text)
+        return x + fm.horizontalAdvance(text)
 
     def _paint_agent_row(
         self,
@@ -378,11 +397,12 @@ class OverlayWidget(QWidget):
         if self._cfg.theme.use_system_cursor:
             self._cursor_pos = None
 
-    def _toggle_group(self, dirname: str) -> None:
-        if dirname in self._collapsed_groups:
-            self._collapsed_groups.remove(dirname)
+    def _toggle_group(self, row: HeaderRow) -> None:
+        key = row.group_key
+        if key in self._collapsed_groups:
+            self._collapsed_groups.discard(key)
         else:
-            self._collapsed_groups.add(dirname)
+            self._collapsed_groups.add(key)
         self._refresh()
 
     def _tick_spinner(self) -> None:
