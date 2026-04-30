@@ -8,8 +8,10 @@ Wires together:
   • System tray icon
 """
 
+import os
 import sys
 import time
+import traceback
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
@@ -29,6 +31,18 @@ from tasklight.server import HookServer
 # Shared context menu
 # ---------------------------------------------------------------------------
 
+
+def _confirm_quit() -> None:
+    reply = QMessageBox.question(
+        None,
+        "Quit Tasklight",
+        "Are you sure you want to quit?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+    )
+    if reply == QMessageBox.StandardButton.Yes:
+        QApplication.quit()
+
+
 def build_context_menu(parent: QWidget) -> QMenu:
     menu = QMenu(parent)
 
@@ -39,7 +53,7 @@ def build_context_menu(parent: QWidget) -> QMenu:
     menu.addSeparator()
 
     quit_action = QAction("Quit", menu)
-    quit_action.triggered.connect(QApplication.quit)
+    quit_action.triggered.connect(_confirm_quit)
     menu.addAction(quit_action)
 
     return menu
@@ -56,6 +70,7 @@ def show_about(parent: QWidget) -> None:
 # ---------------------------------------------------------------------------
 # Tray icon
 # ---------------------------------------------------------------------------
+
 
 def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
     pixmap = QPixmap(size, size)
@@ -80,10 +95,10 @@ def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
 # ---------------------------------------------------------------------------
 
 _STATE_LABEL = {
-    AgentState.THINKING:  "Thinking…",
-    AgentState.TOOL:      "Tool",
-    AgentState.APPROVAL:  "Waiting for approval",
-    AgentState.DONE:      "Done",
+    AgentState.THINKING: "Thinking…",
+    AgentState.TOOL:     "Tool",
+    AgentState.APPROVAL: "Waiting for approval",
+    AgentState.DONE:     "Done",
 }
 
 _BG   = QColor(30, 30, 30, 210)
@@ -107,14 +122,13 @@ class OverlayWidget(QWidget):
     def __init__(self, model: AgentStateModel, context_menu: QMenu) -> None:
         super().__init__(
             None,
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool,
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint,
         )
         self._model = model
         self._context_menu = context_menu
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setFixedWidth(self._WIDTH)
 
         model.dataChanged.connect(self._refresh)
@@ -138,7 +152,7 @@ class OverlayWidget(QWidget):
         """Return (text, colour, is_header) triples for the current state."""
         records = [r for r in self._model.records() if not r.dismissed]
         if not records:
-            return []
+            return [("  No agents", _DIM, False)]
 
         # Group by dirname, preserving insertion order.
         groups: dict[str, list] = {}
@@ -150,7 +164,7 @@ class OverlayWidget(QWidget):
         for dirname, recs in groups.items():
             lines.append((f"/{dirname}", _DIM, True))
             for r in recs:
-                elapsed = _fmt_elapsed(now - r.state_entered_at)
+                elapsed = _fmt_elapsed(now - r.started_at)
                 if r.state == AgentState.TOOL:
                     label = f"Tool: {r.tool_name or '?'}"
                 else:
@@ -164,10 +178,13 @@ class OverlayWidget(QWidget):
         lines = self._build_lines()
         fm = self.fontMetrics()
         lh = fm.height() + 4
-        h = self._PAD * 2 + len(lines) * lh if lines else 0
-        self.setFixedHeight(max(h, 0))
-        self.setVisible(bool(lines))
+        self.setFixedHeight(self._PAD * 2 + len(lines) * lh)
+        self.show()
         self.update()
+
+    def closeEvent(self, a0) -> None:  # noqa: N802
+        if a0 is not None:
+            a0.ignore()
 
     # ------------------------------------------------------------------
     # Painting
@@ -204,8 +221,9 @@ class OverlayWidget(QWidget):
     # Interaction
     # ------------------------------------------------------------------
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802
-        self._context_menu.exec(event.globalPosition().toPoint())
+    def mousePressEvent(self, a0) -> None:  # noqa: N802
+        if a0 is not None and a0.button() == Qt.MouseButton.RightButton:
+            self._context_menu.popup(a0.globalPosition().toPoint())
 
     def _move_to_bottom_right(self) -> None:
         screen = QApplication.primaryScreen()
@@ -223,7 +241,15 @@ class OverlayWidget(QWidget):
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
+    def _excepthook(exc_type, exc_value, exc_tb):
+        traceback.print_exception(exc_type, exc_value, exc_tb)
+    sys.excepthook = _excepthook
+
+    # Force XCB (X11/XWayland) — Wayland lacks global coords and system tray.
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
@@ -233,13 +259,12 @@ def main() -> None:
     server.event_received.connect(model.apply_event)
     server.start()
 
-    context_menu = build_context_menu(None)
-    overlay = OverlayWidget(model, context_menu)
-    context_menu.setParent(overlay)
-    overlay.show()
+    overlay = OverlayWidget(model, QMenu())
+    context_menu = build_context_menu(overlay)
+    overlay._context_menu = context_menu
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        print("Warning: system tray not available.")
+        print("Warning: system tray not available.", file=sys.stderr)
     else:
         tray = QSystemTrayIcon(overlay)
         tray.setIcon(QIcon(_make_tray_icon_pixmap()))
@@ -247,7 +272,7 @@ def main() -> None:
         tray.setContextMenu(context_menu)
         tray.activated.connect(
             lambda reason: (
-                context_menu.exec(tray.geometry().center())
+                context_menu.popup(tray.geometry().center())
                 if reason == QSystemTrayIcon.ActivationReason.Trigger
                 else None
             )

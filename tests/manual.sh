@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manual test: sends a stream of synthetic hook events to the local server.
+# Manual test: simulates realistic claude-code and opencode agent sessions.
 # Usage: bash tests/manual.sh [PORT]
 # Runs forever; Ctrl-C to stop.
 
@@ -12,58 +12,69 @@ post() {
         -d "$1" 2>/dev/null || true
 }
 
-# Three synthetic agents across two directories.
-AGENTS=(
-    "claude-code|sess-aaa|/home/user/projects/myapp"
-    "claude-code|sess-bbb|/home/user/projects/myapp"
-    "opencode|sess-ccc|/home/user/projects/backend"
-)
-
-TOOLS=("bash" "read_file" "write_file" "grep" "web_search" "python")
-
-agent_event() {
-    local source session cwd event data
-    IFS='|' read -r source session cwd <<< "$1"
-    event=$2
-    data=${3:-\{\}}
+event() {
+    local source=$1 session=$2 cwd=$3 event=$4 data=${5:-\{\}}
     post "{\"source\":\"$source\",\"session_id\":\"$session\",\"cwd\":\"$cwd\",\"event\":\"$event\",\"data\":$data}"
 }
 
-echo "Sending events to $URL — Ctrl-C to stop."
+say() { echo "  [$1 / $(basename "$3")] $4"; }
 
-# Start all agents.
-for agent in "${AGENTS[@]}"; do
-    agent_event "$agent" "start"
-done
-sleep 0.5
+TOOLS=("bash" "read_file" "write_file" "grep" "web_search" "python")
 
-# Main loop: cycle each agent through a realistic sequence.
-while true; do
-    for agent in "${AGENTS[@]}"; do
-        # Thinking phase.
-        agent_event "$agent" "thinking"
-        sleep "$(awk 'BEGIN{printf "%.1f", 1+rand()*2}')"
+# Run one agent session to completion, then pause 5 s and repeat forever.
+# Args: source  session_id  cwd
+run_agent() {
+    local source=$1 session=$2 cwd=$3
+    local dir; dir=$(basename "$cwd")
 
-        # Occasionally require approval instead of a tool.
-        if (( RANDOM % 5 == 0 )); then
-            agent_event "$agent" "approval_required"
-            sleep "$(awk 'BEGIN{printf "%.1f", 2+rand()*3}')"
-            agent_event "$agent" "approval_granted"
-            continue
-        fi
+    while true; do
+        say "$source" "$session" "$cwd" "start"
+        event "$source" "$session" "$cwd" start
 
-        # Tool use.
-        tool="${TOOLS[$((RANDOM % ${#TOOLS[@]}))]}"
-        agent_event "$agent" "tool_use" "{\"tool_name\":\"$tool\"}"
-        sleep "$(awk 'BEGIN{printf "%.1f", 0.5+rand()*3}')"
-        agent_event "$agent" "tool_result"
+        # 2–4 thinking+tool cycles per turn.
+        local cycles=$(( RANDOM % 3 + 2 ))
+        for (( i=0; i<cycles; i++ )); do
+            say "$source" "$session" "$cwd" "thinking"
+            event "$source" "$session" "$cwd" thinking
+            sleep $(awk 'BEGIN{printf "%.1f", 1 + rand()*2}')
 
-        # Occasionally finish the turn.
-        if (( RANDOM % 4 == 0 )); then
-            agent_event "$agent" "stop"
-            sleep 3
-            # Restart so the widget shows a new session.
-            agent_event "$agent" "start"
-        fi
+            # ~20% chance of approval required before a tool call.
+            if (( RANDOM % 5 == 0 )); then
+                say "$source" "$session" "$cwd" "approval_required"
+                event "$source" "$session" "$cwd" approval_required
+                sleep $(awk 'BEGIN{printf "%.1f", 3 + rand()*4}')
+                say "$source" "$session" "$cwd" "approval_granted"
+                event "$source" "$session" "$cwd" approval_granted
+                sleep 0.3
+            fi
+
+            local tool="${TOOLS[$((RANDOM % ${#TOOLS[@]}))]}"
+            say "$source" "$session" "$cwd" "tool_use: $tool"
+            event "$source" "$session" "$cwd" tool_use "{\"tool_name\":\"$tool\"}"
+            sleep $(awk 'BEGIN{printf "%.1f", 0.5 + rand()*3}')
+            event "$source" "$session" "$cwd" tool_result
+        done
+
+        say "$source" "$session" "$cwd" "stop (done)"
+        event "$source" "$session" "$cwd" stop
+
+        echo "  [$source / $dir] waiting 5 s before next session…"
+        sleep 5
     done
-done
+}
+
+echo "Tasklight manual test — sending to $URL"
+echo "Agents:"
+echo "  claude-code  sess-cc-1  /home/user/projects/myapp"
+echo "  claude-code  sess-cc-2  /home/user/projects/myapp   (same dir, parallel)"
+echo "  opencode     sess-oc-1  /home/user/projects/backend"
+echo ""
+
+# Run all three agents in parallel, staggered by 2 s so their cycles interleave.
+run_agent "claude-code" "sess-cc-1" "/home/user/projects/myapp"    &
+sleep 2
+run_agent "claude-code" "sess-cc-2" "/home/user/projects/myapp"    &
+sleep 2
+run_agent "opencode"    "sess-oc-1" "/home/user/projects/backend"  &
+
+wait
