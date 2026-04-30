@@ -10,9 +10,9 @@ jobs:
   windows-exe:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8
 
       - name: Install dependencies
         run: uv sync --dev
@@ -20,7 +20,7 @@ jobs:
       - name: Build exe
         run: uv run pyinstaller tasklight.spec
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: tasklight-windows
           path: dist/tasklight.exe
@@ -28,14 +28,14 @@ jobs:
   linux-wheel:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8
 
       - name: Build wheel
         run: uv build --wheel
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: tasklight-wheel
           path: dist/*.whl
@@ -47,12 +47,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: tasklight-windows
           path: artifacts/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: tasklight-wheel
           path: artifacts/
