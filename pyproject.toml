@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tasklight"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "Simple desktop widget that monitors active agents."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -18,5 +18,6 @@ tasklight = "tasklight.app:cli"
 
 [dependency-groups]
 dev = [
+    "pillow>=12.2.0",
     "pyinstaller>=6.20.0",
 ]
