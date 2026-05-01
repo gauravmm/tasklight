@@ -57,6 +57,15 @@ Host yourserver
     RemoteForward 57017 localhost:57017
 ```
 
+**If Tasklight is running on Windows and your SSH client runs in WSL2**, `localhost` resolves to the WSL2 loopback, not Windows. Use the Windows machine's hostname instead — WSL2 always resolves it correctly even after restarts:
+
+```
+Host yourserver
+    RemoteForward 57017 YOUR-PC-NAME:57017
+```
+
+Run `hostname.exe` from WSL2 to get your Windows hostname.
+
 Once connected, run your agent or `bash tests/manual.sh` on the remote machine and events will appear in your local Tasklight. Pass a `hostname` field in hook payloads to see a per-host prefix in the overlay — the `remote` scenario in `manual.sh` demonstrates this.
 
 Note: `ssh -R 57017 yourserver` (without `localhost:57017`) sets up a reverse SOCKS proxy, not a TCP tunnel — plain HTTP hook calls will silently fail.
