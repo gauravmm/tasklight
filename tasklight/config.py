@@ -14,7 +14,7 @@ from PyQt6.QtCore import QFileSystemWatcher, QObject, pyqtSignal
 class DockConfig:
     position: str = "BR"  # TL|TC|TR|ML|MR|BL|BC|BR
     margin: int = 16
-    width: int = 360
+    width: int = 240
 
 
 @dataclass

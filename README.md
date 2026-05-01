@@ -43,14 +43,9 @@ tasklight
 This repository includes ready-to-adapt hook files [hooks/](https://github.com/gauravmm/tasklight/tree/master/hooks/). Install them with the prompt:
 
 ```
-I use Tasklight (https://github.com/gauravmm/tasklight) to monitor AI agents in real time.
-Install the hook for this agent by following the instructions at:
-https://github.com/gauravmm/tasklight/tree/master/hooks
+I use Tasklight (https://github.com/gauravmm/tasklight) to monitor AI agents in real time. Install the hook for this agent by following the instructions at: https://github.com/gauravmm/tasklight/tree/master/hooks
 
-If this machine is running in WSL2 and Tasklight is running on the Windows host, also ask
-me whether SSH reverse port forwarding should be configured so Tasklight can receive events
-from remote sessions. If so, help me add a RemoteForward entry to ~/.ssh/config using the
-Windows hostname (run `hostname.exe` to get it).
+If this machine is running in WSL2 and Tasklight is running on the Windows host, also ask me whether SSH reverse port forwarding should be configured so Tasklight can receive events from remote sessions. If so, help me add a RemoteForward entry to ~/.ssh/config using the Windows hostname.
 ```
 
 ### Over the Network
