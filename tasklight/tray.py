@@ -17,7 +17,7 @@ def build_context_menu(parent: QWidget) -> QMenu:
     menu.addSeparator()
 
     quit_action = QAction("Quit", menu)
-    quit_action.triggered.connect(confirm_quit)
+    quit_action.triggered.connect(lambda: confirm_quit(parent))
     menu.addAction(quit_action)
 
     return menu

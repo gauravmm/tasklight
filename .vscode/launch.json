@@ -5,7 +5,7 @@
       "name": "Tasklight",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/main.py",
+      "module": "tasklight",
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}"
     }

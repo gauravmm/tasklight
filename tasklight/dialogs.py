@@ -3,15 +3,15 @@
 from PyQt6.QtWidgets import QApplication, QMessageBox, QWidget
 
 
-def confirm_quit() -> None:
+def confirm_quit(parent: QWidget | None = None) -> None:
     reply = QMessageBox.question(
-        None,
+        parent,
         "Quit Tasklight",
         "Are you sure you want to quit?",
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
     )
     if reply == QMessageBox.StandardButton.Yes:
-        QApplication.quit()
+        QApplication.instance().exit(0)
 
 
 def show_about(parent: QWidget) -> None:
