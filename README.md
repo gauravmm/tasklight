@@ -1,8 +1,6 @@
 # <img src="spec/logo.png" height="32" /> Tasklight
 
-Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time.
-
-It listens for hook events over HTTP and shows per-agent state such as: Thinking, Tool use, Waiting for approval, and Done.
+Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time. It listens for hooks over HTTP and shows per-agent state in a small floating window that can be docked.
 
 <img src="spec/showcase.gif" alt="Tasklight overlay showing agents in various states" />
 
@@ -13,20 +11,17 @@ Tasklight is a tiny product that your agent can customize to your heart's desire
 ## Features
 
 - PyQt6 overlay with translucent background and always-on-top window
-- Live in-memory agent state model
-- Local HTTP hook server on `127.0.0.1`
-- Grouping by project directory
+- Local and remote agent monitoring in a single app.
+- Multiple agents per project dir, each tracked separately.
 - Collapsible groups
 - Click-to-dismiss for done agents
 - Drag-to-dock behavior with multi-screen-aware snapping
-- Hot-reloaded YAML config
-- System tray menu
 
 ## Install and run
 
 ### Windows — pre-built executable
 
-Download `tasklight.exe` from the [Actions](../../actions) tab (pick the latest `windows-exe` artifact from a `v*` tag build) and run it directly — no Python required.
+Download `tasklight.exe` from the [Releases](../../releases) page and run it directly — no Python required.
 
 ### Python — uvx (recommended)
 
@@ -45,6 +40,16 @@ tasklight
 
 ## Hooks
 
+This repository includes ready-to-adapt hook files in [hooks/](hooks/) for:
+
+- Claude Code
+- Codex CLI
+- OpenCode
+
+Point your agent at them and they'll install it for you. They all forward lifecycle/tool events to Tasklight's local hook server.
+
+### Over the Network
+
 To monitor agents running on a remote machine, use SSH reverse port forwarding so the remote machine's hook calls tunnel back to your local Tasklight:
 
 ```bash
@@ -56,36 +61,15 @@ Or add it permanently to `~/.ssh/config`:
 ```
 Host yourserver
     RemoteForward 57017 localhost:57017
-```
 
-**If Tasklight is running on Windows and your SSH client runs in WSL2**, `localhost` resolves to the WSL2 loopback, not Windows. Use the Windows machine's hostname instead — WSL2 always resolves it correctly even after restarts:
-
-```
+# If SSH runs on WSL2 and you run tasklight on Windows:
 Host yourserver
     RemoteForward 57017 YOUR-PC-NAME:57017
 ```
 
-Run `hostname.exe` from WSL2 to get your Windows hostname.
-
-Once connected, run your agent or `bash tests/manual.sh` on the remote machine and events will appear in your local Tasklight. Pass a `hostname` field in hook payloads to see a per-host prefix in the overlay — the `remote` scenario in `manual.sh` demonstrates this.
-
-Note: `ssh -R 57017 yourserver` (without `localhost:57017`) sets up a reverse SOCKS proxy, not a TCP tunnel — plain HTTP hook calls will silently fail.
-
-This repository includes ready-to-adapt hook files in [hooks/](hooks/) for:
-
-- Claude Code
-- Codex CLI
-- OpenCode
-
-Point your agent at them and they'll install it for you. They all forward lifecycle/tool events to Tasklight's local hook server.
-
 ## Configuration
 
-Tasklight reads a YAML config file, defaulting to `./tasklight.yaml`.
-
-If the file does not exist, Tasklight writes a default one on startup.
-
-Current config shape:
+Tasklight reads a YAML config file, defaulting to `./tasklight.yaml`. If the file does not exist, Tasklight writes a default one on startup.
 
 ```yaml
 port: 57017
