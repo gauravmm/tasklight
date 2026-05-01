@@ -14,6 +14,38 @@ _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
 
 _log = logging.getLogger(__name__)
 
+# Per-model context-window sizes (tokens). Default of 200k covers
+# every current Claude model; entries here are explicit overrides for
+# the rare models that ship with a different ceiling. Match by prefix
+# so "claude-sonnet-4-6-20250812" still resolves.
+_DEFAULT_CONTEXT_WINDOW = 200_000
+_MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    # 1M-context models would go here, e.g.:
+    #   "claude-sonnet-4-1m": 1_000_000,
+}
+
+
+def _context_window_for_model(model: str | None) -> int | None:
+    """Best-effort mapping from a model identifier to its context window.
+
+    Returns None for non-Claude/unrecognised models so the caller can
+    fall back to a config default.
+    """
+    if not isinstance(model, str) or not model:
+        return None
+    for prefix, size in _MODEL_CONTEXT_WINDOW.items():
+        if model.startswith(prefix):
+            return size
+    if not model.startswith("claude-"):
+        return None
+    # Heuristic: any claude-*-1m variant ships with a 1M-token context
+    # window. Matches both bare suffix (claude-sonnet-4-1m) and dated
+    # suffix (claude-sonnet-4-1m-20250812).
+    if model.endswith("-1m") or "-1m-" in model:
+        return 1_000_000
+    return _DEFAULT_CONTEXT_WINDOW
+
+
 # Mapping from Claude Code hook_event_name to internal event name.
 _CLAUDE_EVENT_MAP: dict[str, str] = {
     "SessionStart": "start",
@@ -105,8 +137,9 @@ def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> dict | None:
     """Scan transcript JSONL tail in reverse for the latest message.usage.
 
     Returns a dict with input_tokens, cache_creation_tokens,
-    cache_read_tokens (sub-fields renamed to drop the _input_ infix
-    Anthropic uses), or None if no usable usage block is found.
+    cache_read_tokens, and (when the message names a recognised Claude
+    model) context_window_max. Returns None if no usable usage block
+    is found.
     """
     if not tail_bytes:
         return None
@@ -121,9 +154,10 @@ def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> dict | None:
         except (json.JSONDecodeError, ValueError):
             # Leading line may be truncated mid-JSON; that's expected.
             continue
-        usage = obj.get("message", {})
-        if isinstance(usage, dict):
-            usage = usage.get("usage")
+        message = obj.get("message")
+        if not isinstance(message, dict):
+            continue
+        usage = message.get("usage")
         if isinstance(usage, dict):
             input_t = int(usage.get("input_tokens") or 0)
             cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
@@ -131,11 +165,15 @@ def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> dict | None:
             # Guard against all-zero "usage" blocks: those would pin the
             # sparkline to zero and don't represent a real measurement.
             if input_t + cache_creation + cache_read > 0:
-                return {
+                result: dict = {
                     "input_tokens": input_t,
                     "cache_creation_tokens": cache_creation,
                     "cache_read_tokens": cache_read,
                 }
+                cwm = _context_window_for_model(message.get("model"))
+                if cwm is not None:
+                    result["context_window_max"] = cwm
+                return result
     return None
 
 

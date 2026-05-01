@@ -7,8 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from PyQt6.QtCore import QPointF, QRect
-from PyQt6.QtGui import QColor, QPainter, QPolygonF
+from PyQt6.QtCore import QPointF, QRect, QRectF
+from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPolygonF
 
 from tasklight.config import TokenRateConfig
 from tasklight.model import TokenSample
@@ -145,6 +145,7 @@ def paint_sparkline(
     resets: list[tuple[float, float]],
     cfg: TokenRateConfig,
     now: float | None = None,
+    context_window_max: int = 0,
 ) -> None:
     """Paint a stacked token-rate sparkline filling ``rect`` (§5).
 
@@ -171,9 +172,23 @@ def paint_sparkline(
     curve = max(1.0, cfg.time_curve_exponent)
     display_now = now - max(0.0, cfg.render_lag_s)
 
+    # Effective context-window cap: prefer the per-record value supplied
+    # by the caller (derived from the latest hook payload's model
+    # field); fall back to the config default if that's unknown.
+    effective_cwm = context_window_max if context_window_max > 0 else cfg.context_window_max
+
+    # Reserve the bottom rows for the context-window line if enabled.
+    show_context_line = effective_cwm > 0 and cfg.context_line_height_px > 0
+    line_h = cfg.context_line_height_px if show_context_line else 0
+    # 1px gap between bands and line so the line reads as separate.
+    bands_bottom = chart_bottom - (line_h + 1 if show_context_line else 0)
+
     mean_rate = compute_mean_rate(history, window_s, now)
-    chart_height = chart_bottom - chart_top - 1
-    y_scale = chart_height / max(mean_rate * cfg.scale_headroom, 1.0)
+    chart_height = bands_bottom - chart_top - 1
+    if chart_height <= 0:
+        # Row too short for both bands and line; skip bands.
+        chart_height = 0
+    y_scale = chart_height / max(mean_rate * cfg.scale_headroom, 1.0) if chart_height > 0 else 0.0
 
     # For each pixel column, compute three cumulative top-of-band y values:
     # y_read (top of read band), y_creation (top of creation band),
@@ -188,9 +203,9 @@ def paint_sparkline(
         t_x = display_now - window_s * (u ** curve)
 
         if is_in_reset_edge(resets, t_x):
-            y_read.append(float(chart_bottom))
-            y_creation.append(float(chart_bottom))
-            y_input.append(float(chart_bottom))
+            y_read.append(float(bands_bottom))
+            y_creation.append(float(bands_bottom))
+            y_input.append(float(bands_bottom))
             continue
 
         r_in, r_creation, r_read = smoothed_rates(history, t_x, tau_s)
@@ -205,48 +220,97 @@ def paint_sparkline(
         h_creation = min((r_read + r_creation) * y_scale, chart_height)
         h_total = min((r_read + r_creation + r_in) * y_scale, chart_height)
 
-        y_read.append(chart_bottom - h_read)
-        y_creation.append(chart_bottom - h_creation)
-        y_input.append(chart_bottom - h_total)
+        y_read.append(bands_bottom - h_read)
+        y_creation.append(bands_bottom - h_creation)
+        y_input.append(bands_bottom - h_total)
 
     painter.save()
     painter.setClipRect(rect)
     painter.setPen(QColor(0, 0, 0, 0))
 
-    def fill_band(top_ys: list[float], bottom_ys: list[float] | None, color_hex: str) -> None:
-        """Fill the polygon between two y-traces (or top to chart_bottom)."""
-        polygon: list[QPointF] = []
-        # Top edge, left to right.
-        for i, x in enumerate(range(chart_left, chart_right + 1)):
-            polygon.append(QPointF(x, top_ys[i]))
-        # Bottom edge, right to left.
-        if bottom_ys is None:
-            polygon.append(QPointF(chart_right, chart_bottom))
-            polygon.append(QPointF(chart_left, chart_bottom))
-        else:
-            for i in range(n_cols - 1, -1, -1):
-                x = chart_left + i
-                polygon.append(QPointF(x, bottom_ys[i]))
+    # Left-edge fade: a horizontal alpha gradient applied to every band.
+    # 0% alpha at chart_left, fade_alpha (= cfg.fill_alpha) at the
+    # fade-in stop, constant from there to chart_right.
+    fade_frac = max(0.0, min(1.0, cfg.left_fade_fraction))
 
+    def band_brush(color_hex: str) -> QBrush:
         color = QColor(color_hex)
         color.setAlphaF(cfg.fill_alpha)
-        painter.setBrush(color)
+        if fade_frac <= 0.0 or chart_width <= 0:
+            return QBrush(color)
+        gradient = QLinearGradient(
+            QPointF(float(chart_left), 0.0),
+            QPointF(float(chart_right), 0.0),
+        )
+        transparent = QColor(color)
+        transparent.setAlphaF(0.0)
+        gradient.setColorAt(0.0, transparent)
+        gradient.setColorAt(fade_frac, color)
+        gradient.setColorAt(1.0, color)
+        return QBrush(gradient)
+
+    def fill_band(
+        top_ys: list[float],
+        bottom_ys: list[float] | None,
+        color_hex: str,
+    ) -> None:
+        polygon: list[QPointF] = []
+        for i, x in enumerate(range(chart_left, chart_right + 1)):
+            polygon.append(QPointF(x, top_ys[i]))
+        if bottom_ys is None:
+            polygon.append(QPointF(chart_right, bands_bottom))
+            polygon.append(QPointF(chart_left, bands_bottom))
+        else:
+            for i in range(n_cols - 1, -1, -1):
+                polygon.append(QPointF(chart_left + i, bottom_ys[i]))
+        painter.setBrush(band_brush(color_hex))
         painter.drawPolygon(QPolygonF(polygon))
 
-    # Bottom band first so middle/top paint over its top edge.
-    fill_band(y_read, None, cfg.cache_read_color)
-    fill_band(y_creation, y_read, cfg.cache_creation_color)
-    fill_band(y_input, y_creation, cfg.input_color)
+    if chart_height > 0:
+        fill_band(y_read, None, cfg.cache_read_color)
+        fill_band(y_creation, y_read, cfg.cache_creation_color)
+        fill_band(y_input, y_creation, cfg.input_color)
 
-    # Optional stroke along the total top edge.
-    if cfg.stroke_alpha > 0.0:
-        stroke_color = QColor(cfg.input_color)
-        stroke_color.setAlphaF(cfg.stroke_alpha)
-        from PyQt6.QtGui import QPen
-        painter.setPen(QPen(stroke_color, 1.0))
-        painter.setBrush(QColor(0, 0, 0, 0))
-        painter.drawPolyline(
-            QPolygonF([QPointF(chart_left + i, y_input[i]) for i in range(n_cols)])
-        )
+        if cfg.stroke_alpha > 0.0:
+            stroke_color = QColor(cfg.input_color)
+            stroke_color.setAlphaF(cfg.stroke_alpha)
+            from PyQt6.QtGui import QPen
+            painter.setPen(QPen(stroke_color, 1.0))
+            painter.setBrush(QColor(0, 0, 0, 0))
+            painter.drawPolyline(
+                QPolygonF([QPointF(chart_left + i, y_input[i]) for i in range(n_cols)])
+            )
+            painter.setPen(QColor(0, 0, 0, 0))
+
+    # Context-window indicator: thin solid line at the bottom of the
+    # chart band whose length is proportional to current context fill.
+    # Rendered with the same left-fade so it visually anchors to the
+    # band stack above it.
+    if show_context_line:
+        latest_total = history[-1].total
+        fill_fraction = min(1.0, latest_total / effective_cwm)
+        if fill_fraction > 0.0:
+            line_color_hex = cfg.context_line_color or cfg.input_color
+            line_color = QColor(line_color_hex)
+            line_color.setAlphaF(cfg.context_line_alpha)
+            line_w = chart_width * fill_fraction
+            line_y = chart_bottom - line_h + 1
+            line_rect = QRectF(
+                float(chart_left), float(line_y), float(line_w), float(line_h)
+            )
+            if fade_frac > 0.0:
+                gradient = QLinearGradient(
+                    QPointF(float(chart_left), 0.0),
+                    QPointF(float(chart_right), 0.0),
+                )
+                transparent = QColor(line_color)
+                transparent.setAlphaF(0.0)
+                gradient.setColorAt(0.0, transparent)
+                gradient.setColorAt(fade_frac, line_color)
+                gradient.setColorAt(1.0, line_color)
+                painter.setBrush(QBrush(gradient))
+            else:
+                painter.setBrush(line_color)
+            painter.drawRect(line_rect)
 
     painter.restore()

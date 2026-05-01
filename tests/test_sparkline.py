@@ -13,7 +13,11 @@ from tasklight.overlay.sparkline import (
     iter_segments,
     smoothed_rate,
 )
-from tasklight.server import _extract_usage_from_transcript_tail, _parse_multipart
+from tasklight.server import (
+    _context_window_for_model,
+    _extract_usage_from_transcript_tail,
+    _parse_multipart,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +380,43 @@ class TestExtractUsage:
             "cache_creation_tokens": 5000,
             "cache_read_tokens": 2000,
         }
+
+    def test_includes_context_window_when_model_known(self):
+        line = self._make_line({
+            "type": "assistant",
+            "message": {
+                "model": "claude-opus-4-7",
+                "usage": {"input_tokens": 100, "cache_read_input_tokens": 50},
+            },
+        })
+        result = _extract_usage_from_transcript_tail(line)
+        assert result["context_window_max"] == 200_000
+
+    def test_omits_context_window_when_model_unknown(self):
+        line = self._make_line({
+            "message": {
+                "model": "gpt-4-turbo",
+                "usage": {"input_tokens": 100},
+            },
+        })
+        result = _extract_usage_from_transcript_tail(line)
+        assert "context_window_max" not in result
+
+    def test_context_window_for_model_helper(self):
+        assert _context_window_for_model("claude-opus-4-7") == 200_000
+        assert _context_window_for_model("claude-sonnet-4-6-20250812") == 200_000
+        assert _context_window_for_model("claude-haiku-4-5") == 200_000
+        assert _context_window_for_model("gpt-4") is None
+        assert _context_window_for_model(None) is None
+        assert _context_window_for_model("") is None
+
+    def test_context_window_1m_heuristic(self):
+        # claude-*-1m variants ship with a 1M-token context window.
+        assert _context_window_for_model("claude-sonnet-4-1m") == 1_000_000
+        assert _context_window_for_model("claude-sonnet-4-1m-20250812") == 1_000_000
+        # "1m" embedded in a non-suffix position should NOT trigger
+        # the heuristic (false-positive guard).
+        assert _context_window_for_model("claude-1monkey-4") == 200_000
 
     def test_curl_at_form_with_filename(self):
         """curl `-F field=@file` adds filename="..." to Content-Disposition.

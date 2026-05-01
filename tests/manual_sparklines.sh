@@ -50,7 +50,7 @@ trap 'send_end; rm -rf "$WORKDIR"; exit 0' INT TERM
 
 append_usage() {
   local input=$1 cache_creation=$2 cache_read=$3
-  printf '{"type":"assistant","message":{"usage":{"input_tokens":%d,"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d,"output_tokens":250}}}\n' \
+  printf '{"type":"assistant","message":{"model":"claude-opus-4-7","usage":{"input_tokens":%d,"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d,"output_tokens":250}}}\n' \
     "$input" "$cache_creation" "$cache_read" >> "$TRANSCRIPT"
 }
 

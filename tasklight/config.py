@@ -46,6 +46,18 @@ class TokenRateConfig:
     color: str = "#5599cc"
     fill_alpha: float = 0.35
     stroke_alpha: float = 0.0      # 0 = no stroke, just the fill
+    # Fraction of chart width over which the left edge fades in from
+    # transparent to full opacity. 0.0 disables the fade. The fade
+    # softens the abrupt left edge of the scrolling chart.
+    left_fade_fraction: float = 0.15
+    # Thin context-window indicator drawn at the bottom of the chart
+    # band: a horizontal line whose length is proportional to
+    # latest_total_tokens / context_window_max. Set context_window_max
+    # to 0 to disable.
+    context_window_max: int = 200000
+    context_line_height_px: int = 1
+    context_line_alpha: float = 0.65
+    context_line_color: str = ""   # empty = use input_color
 
 
 @dataclass

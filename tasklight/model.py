@@ -48,6 +48,9 @@ class AgentRecord:
     # to time of the new baseline. Pixels in this interval render at the
     # chart floor so the discontinuity stays visible.
     token_resets: list[tuple[float, float]] = field(default_factory=list)
+    # Context-window size (tokens) reported by the latest hook payload,
+    # or 0 if unknown — the painter falls back to the config default.
+    context_window_max: int = 0
 
 
 # Maps incoming event names to the next AgentState (None = no change / special).
@@ -149,6 +152,9 @@ class AgentStateModel(QAbstractListModel):
         # so we trust the shape here.
         usage = payload.get("usage")
         if isinstance(usage, dict):
+            cwm = usage.get("context_window_max")
+            if isinstance(cwm, int) and cwm > 0:
+                record.context_window_max = cwm
             self._append_token_sample(
                 record,
                 input_tokens=int(usage.get("input_tokens", 0) or 0),
