@@ -18,6 +18,19 @@ class DockConfig:
 
 
 @dataclass
+class TokenRateConfig:
+    enabled: bool = True
+    window_s: int = 300            # sliding window length
+    width_em: float = 24.0         # chart width in em units
+    reset_fraction: float = 0.20   # tokens drop ratio that triggers reset
+    scale_headroom: float = 2.5    # y-axis headroom multiplier
+    smoothing_tau_s: float = 0.0   # 0 = auto = window_s / 30
+    color: str = "#5599cc" # TODO: Split into stroke_color and fill_color
+    fill_alpha: float = 0.35
+    stroke_alpha: float = 0.0      # 0 = no stroke, just the fill
+
+
+@dataclass
 class ThemeConfig:
     background: str = "#1e1e1e"
     background_alpha: float = 0.85
@@ -33,6 +46,7 @@ class ThemeConfig:
     font_family: str = "monospace"
     font_size: int = 13
     corner_radius: int = 10
+    token_rate: TokenRateConfig = field(default_factory=TokenRateConfig)
 
 
 @dataclass
@@ -63,13 +77,16 @@ def _write_defaults(path: Path) -> None:
     """Write a default config file. Skips if the parent directory doesn't exist."""
     if not path.parent.exists():
         return
+    default_theme = ThemeConfig()
+    theme_dict = {k: v for k, v in default_theme.__dict__.items() if k != "token_rate"}
+    theme_dict["token_rate"] = {k: v for k, v in TokenRateConfig().__dict__.items()}
     with path.open("w") as fh:
         yaml.dump(
             {
                 "port": AppConfig.port,
                 "allowed_subnets": AppConfig().allowed_subnets,
                 "dock": {k: v for k, v in DockConfig().__dict__.items()},
-                "theme": {k: v for k, v in ThemeConfig().__dict__.items()},
+                "theme": theme_dict,
                 "timeouts": {k: v for k, v in TimeoutsConfig().__dict__.items()},
             },
             fh,
@@ -92,7 +109,10 @@ def load_config(path: Path) -> AppConfig:
     if "dock" in raw and isinstance(raw["dock"], dict):
         _merge(cfg.dock, raw["dock"])
     if "theme" in raw and isinstance(raw["theme"], dict):
-        _merge(cfg.theme, raw["theme"])
+        theme_raw = raw["theme"]
+        _merge(cfg.theme, {k: v for k, v in theme_raw.items() if k != "token_rate"})
+        if "token_rate" in theme_raw and isinstance(theme_raw["token_rate"], dict):
+            _merge(cfg.theme.token_rate, theme_raw["token_rate"])
     if "timeouts" in raw and isinstance(raw["timeouts"], dict):
         _merge(cfg.timeouts, raw["timeouts"])
     return cfg
