@@ -1,15 +1,10 @@
 # <img src="spec/logo.png" height="32" /> Tasklight
 
-<img src="spec/showcase.gif" alt="Tasklight overlay showing agents in various states" />
-
 Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time.
 
-It listens for hook events over HTTP and shows per-agent state such as:
+It listens for hook events over HTTP and shows per-agent state such as: Thinking, Tool use, Waiting for approval, and Done.
 
-- `Thinking`
-- `Tool: <name>`
-- `Waiting for approval`
-- `Done`
+<img src="spec/showcase.gif" alt="Tasklight overlay showing agents in various states" />
 
 Today the project targets Claude Code, Codex, and opencode hook payloads and renders them in a dockable PyQt6 desktop widget.
 
@@ -35,12 +30,16 @@ Download `tasklight.exe` from the [Actions](../../actions) tab (pick the latest 
 
 ### Python — uvx (recommended)
 
-TODO: One line command which downloads the latest release or `master` and runs that.
-
-Or install it into a persistent tool environment:
+Run directly without installing:
 
 ```bash
-uv tool install ./tasklight-*.whl
+uvx --from git+https://github.com/gauravmm/tasklight tasklight
+```
+
+Or install into a persistent tool environment:
+
+```bash
+uv tool install git+https://github.com/gauravmm/tasklight
 tasklight
 ```
 
