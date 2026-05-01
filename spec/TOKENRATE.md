@@ -91,7 +91,7 @@ identical across every Claude Code event.
 | Field | Required | Type | Content |
 |---|---|---|---|
 | `hook` | yes | `application/json` | Claude Code's hook stdin JSON, byte-for-byte |
-| `transcript_tail` | no | `text/plain` | Raw bytes of the last few lines of the transcript JSONL (default 6), or empty if unreadable |
+| `transcript_tail` | no | `text/plain` | Raw bytes of the last few lines of the transcript JSONL (default 20), or empty if unreadable |
 
 Headers:
 
@@ -140,41 +140,67 @@ for everything that arrives on this endpoint.
 
 #### 2.2.3 Hook command shape
 
-`hooks/claude.settings.json` uses the **same block** for every Claude
-Code event — the server reads `hook_event_name` from the stdin JSON, so
-the shell does not need to specialise per event:
+The shell logic lives in a single script,
+`hooks/tasklight-claude-hook.sh`, installed to
+`~/.claude/hooks/tasklight-claude-hook.sh`. Every Claude Code event in
+`claude.settings.json` calls it with no arguments:
+
+```json
+{
+  "type": "command",
+  "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh"
+}
+```
+
+The server reads `hook_event_name` from the stdin JSON, so a single
+script handles all events. The script:
 
 ```sh
-INPUT=$(cat)
-TP=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
-TF=$(mktemp)
-[ -n "$TP" ] && [ -r "$TP" ] && tail -n 6 "$TP" > "$TF"
+#!/usr/bin/env bash
+set -u
 
-WSL_HOST=$([ -n "$WSL_DISTRO_NAME" ] && \
-  ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+INPUT=$(cat)
+IF=$(mktemp); printf '%s' "$INPUT" > "$IF"
+
+TP=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+TF=$(mktemp)
+if [ -n "$TP" ] && [ -r "$TP" ]; then
+  tail -n "${TASKLIGHT_TAIL_LINES:-20}" "$TP" > "$TF"
+fi
+
+WSL_HOST=
+if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+  WSL_HOST=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+fi
+
+HOST=${TASKLIGHT_HOST:-${WSL_HOST:-127.0.0.1}}
+PORT=${TASKLIGHT_PORT:-57017}
 
 curl -sf -m 1 \
   -H "X-Tasklight-Hostname: $(hostname)" \
-  -F "hook=$INPUT;type=application/json" \
+  -F "hook=<$IF;type=application/json" \
   -F "transcript_tail=@$TF;type=text/plain" \
-  "http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code" \
+  "http://${HOST}:${PORT}/hook/claude-code" \
   >/dev/null 2>&1 || true
 
-rm -f "$TF"
+rm -f "$IF" "$TF"
 ```
 
 Notes:
 
 - The single `jq -r '.transcript_path // empty'` extraction is the only
-  parsing the bash side performs. Everything else is byte-passthrough.
-- `tail -n 6` is a heuristic starting point. Claude Code writes one JSON
-  object per line, and a typical assistant turn writes one line with
-  `message.usage`, so a small window is enough to catch the most recent
-  one. Bump if we see misses in practice.
+  parsing the script performs; everything else is byte-passthrough.
+- The hook JSON is staged to a temp file and sent via `-F "hook=<$IF;…"`
+  (rather than `-F "hook=$INPUT;…"`) so curl's `@`/`<` value-prefix
+  interpretation and embedded-newline handling can never bite. Both
+  temp files are cleaned up on exit.
+- `tail -n 20` is the default; override with `TASKLIGHT_TAIL_LINES`. The
+  most recent `message.usage` is typically within the last few lines,
+  but parallel tool batches can push it back.
 - Multipart (rather than a JSON wrapper) avoids escaping the transcript
-  bytes in the hook shell — both fields are sent raw.
+  bytes in the shell — both fields are sent raw.
 - If the transcript can't be read, `transcript_tail` is empty and the
-  server simply skips the token-history append. The state event still
+  server skips the token-history append. The state event still
   registers.
 - Cross-host (WSL → Windows host running Tasklight) keeps working: the
   hook reads the transcript locally and ships the bytes over HTTP.

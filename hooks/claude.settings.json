@@ -1,76 +1,26 @@
 {
+  "_comment": "Install hooks/tasklight-claude-hook.sh to ~/.claude/hooks/ before merging.",
   "hooks": {
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PreToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ]
   }
 }
