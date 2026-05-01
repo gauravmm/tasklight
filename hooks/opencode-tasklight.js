@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { execSync } from "child_process";
 import { hostname } from "os";
 
 const PORT = 57017;
@@ -7,7 +7,8 @@ function resolveUrls() {
   if (process.env.TASKLIGHT_URL) return [process.env.TASKLIGHT_URL];
   if (process.env.WSL_DISTRO_NAME) {
     try {
-      const match = readFileSync("/etc/resolv.conf", "utf8").match(/^nameserver\s+(\S+)/m);
+      const out = execSync("ip route show default", { encoding: "utf8" });
+      const match = out.match(/default via (\S+)/);
       if (match) return [`http://${match[1]}:${PORT}/hook`, `http://127.0.0.1:${PORT}/hook`];
     } catch {}
   }
@@ -119,6 +120,17 @@ export const TasklightPlugin = async ({ directory, worktree }) => {
         cwd,
         hostname: HOSTNAME,
         event: "thinking",
+        data: {},
+      });
+    },
+
+    "permission.ask": async () => {
+      await post({
+        source: "opencode",
+        session_id: currentSessionId,
+        cwd,
+        hostname: HOSTNAME,
+        event: "approval_required",
         data: {},
       });
     },
