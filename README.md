@@ -21,7 +21,7 @@ Tasklight is a tiny product that your agent can customize to your heart's desire
 
 ### Windows — pre-built executable
 
-Download `tasklight.exe` from the [Releases](../../releases) page and run it directly — no Python required.
+Download `tasklight.exe` from the [Releases](https://github.com/gauravmm/tasklight/releases) page and run it directly — no Python required.
 
 ### Python — uvx (recommended)
 
@@ -40,13 +40,18 @@ tasklight
 
 ## Hooks
 
-This repository includes ready-to-adapt hook files in [hooks/](hooks/) for:
+This repository includes ready-to-adapt hook files [hooks/](https://github.com/gauravmm/tasklight/tree/master/hooks/). Install them with the prompt:
 
-- Claude Code
-- Codex CLI
-- OpenCode
+```
+I use Tasklight (https://github.com/gauravmm/tasklight) to monitor AI agents in real time.
+Install the hook for this agent by following the instructions at:
+https://github.com/gauravmm/tasklight/tree/master/hooks
 
-Point your agent at them and they'll install it for you. They all forward lifecycle/tool events to Tasklight's local hook server.
+If this machine is running in WSL2 and Tasklight is running on the Windows host, also ask
+me whether SSH reverse port forwarding should be configured so Tasklight can receive events
+from remote sessions. If so, help me add a RemoteForward entry to ~/.ssh/config using the
+Windows hostname (run `hostname.exe` to get it).
+```
 
 ### Over the Network
 
