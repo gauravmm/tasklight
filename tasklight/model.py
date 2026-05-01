@@ -1,14 +1,11 @@
 """Agent state model: in-memory records + QAbstractListModel."""
 
-import logging
 import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSignal
-
-_log = logging.getLogger(__name__)
 
 
 class AgentState(Enum):
@@ -138,14 +135,11 @@ class AgentStateModel(QAbstractListModel):
             record.tool_name = None
 
         # Append token sample if context_tokens present in payload.
-        raw_ct = payload.get("context_tokens")
-        if raw_ct is not None:
-            try:
-                ct = int(raw_ct)
-                if ct >= 0:
-                    self._append_token_sample(record, ct)
-            except (ValueError, TypeError):
-                _log.warning("context_tokens parse error (dropped): %r", raw_ct)
+        # The server validates context_tokens before emitting, so we trust
+        # it here — a non-int sneaking through is a server-side bug.
+        ct = payload.get("context_tokens")
+        if isinstance(ct, int) and ct >= 0:
+            self._append_token_sample(record, ct)
 
         row = self._records.index(record)
         idx = self.index(row)

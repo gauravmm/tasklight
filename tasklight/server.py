@@ -50,7 +50,14 @@ def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
         stripped = part.strip(b"\r\n")
         if stripped in (b"", b"--"):
             continue
-        stripped = stripped.rstrip(b"\r\n--")
+        # The closing boundary tail "--" appears on the last part; strip
+        # it as a literal suffix (not a byte set) if present.
+        if stripped.endswith(b"\r\n--"):
+            stripped = stripped[:-4]
+        elif stripped.endswith(b"\n--"):
+            stripped = stripped[:-3]
+        elif stripped.endswith(b"--"):
+            stripped = stripped[:-2]
 
         # Split headers from body (double CRLF or double LF).
         if b"\r\n\r\n" in stripped:
@@ -59,6 +66,12 @@ def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
             headers_raw, _, field_body = stripped.partition(b"\n\n")
         else:
             continue
+
+        # Strip the trailing CRLF that precedes the next delimiter.
+        if field_body.endswith(b"\r\n"):
+            field_body = field_body[:-2]
+        elif field_body.endswith(b"\n"):
+            field_body = field_body[:-1]
 
         # Extract name from Content-Disposition header.
         name_match = re.search(
@@ -109,12 +122,14 @@ def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> int | None:
         if isinstance(usage, dict):
             usage = usage.get("usage")
         if isinstance(usage, dict):
-            total = (
-                (usage.get("input_tokens") or 0)
-                + (usage.get("cache_creation_input_tokens") or 0)
-                + (usage.get("cache_read_input_tokens") or 0)
-            )
-            return total
+            input_t = usage.get("input_tokens") or 0
+            cache_creation = usage.get("cache_creation_input_tokens") or 0
+            cache_read = usage.get("cache_read_input_tokens") or 0
+            total = input_t + cache_creation + cache_read
+            # Guard against all-zero "usage" blocks: those would pin the
+            # sparkline to zero and don't represent a real measurement.
+            if total > 0:
+                return total
     return None
 
 
