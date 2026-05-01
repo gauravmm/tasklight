@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -17,10 +18,11 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from tasklight.config import AppConfig
-from tasklight.model import AgentState, AgentStateModel
+from tasklight.model import AgentState, AgentStateModel, TokenSample
 from tasklight.overlay.layout import build_layout, elide, hit_test
 from tasklight.overlay.presentation import glyph_for_state, hex_color
-from tasklight.overlay.types import AgentRow, HeaderRow, OverlayLayout
+from tasklight.overlay.sparkline import paint_sparkline
+from tasklight.overlay.types import AgentRow, HeaderRow, LayoutMetrics, LayoutRow, OverlayLayout
 from tasklight.overlay.view_model import build_rows
 
 
@@ -130,6 +132,7 @@ class OverlayWidget(QWidget):
         )
 
         metrics = layout.metrics
+        now = time.monotonic()
         for layout_row in layout.rows:
             row = layout_row.row
             status = row.summary if isinstance(row, HeaderRow) else row
@@ -146,6 +149,19 @@ class OverlayWidget(QWidget):
                     status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0
                 ):
                     painter.fillRect(row_rect, self._colors.done_bg)
+
+            # Paint sparkline before text for AgentRow (non-APPROVAL) rows (§5.3).
+            if (
+                isinstance(row, AgentRow)
+                and row.record_session_id
+                and row.state != AgentState.APPROVAL
+                and self._cfg.theme.token_rate.enabled
+            ):
+                history = self._token_history_for(row.record_session_id)
+                if len(history) >= 2:
+                    self._paint_row_sparkline(
+                        painter, layout_row, metrics, history, now
+                    )
 
             baseline = layout_row.top + painter.fontMetrics().ascent()
             if isinstance(row, HeaderRow):
@@ -282,10 +298,16 @@ class OverlayWidget(QWidget):
             done_bg=hex_color(theme.done_bg) if theme.done_bg else QColor(0, 0, 0, 0),
         )
 
+    def _token_history_for(self, session_id: str) -> list[TokenSample]:
+        """Return the token_history list for the given session_id, or empty."""
+        for record in self._model.records():
+            if record.session_id == session_id:
+                return record.token_history
+        return []
+
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
-        if not self._cfg.theme.animate_spinners:
-            return False
-        return any(
+        # Spinners need the timer if animate_spinners is on.
+        spinner_active = self._cfg.theme.animate_spinners and any(
             (
                 isinstance(layout_row.row, AgentRow)
                 and layout_row.row.state in (AgentState.THINKING, AgentState.TOOL)
@@ -298,6 +320,48 @@ class OverlayWidget(QWidget):
             )
             for layout_row in layout.rows
         )
+        if spinner_active:
+            return True
+
+        # Chart also needs the timer when any visible row has ≥2 samples (§5.5).
+        if self._cfg.theme.token_rate.enabled:
+            for layout_row in layout.rows:
+                row = layout_row.row
+                if not isinstance(row, AgentRow) or not row.record_session_id:
+                    continue
+                history = self._token_history_for(row.record_session_id)
+                if len(history) >= 2:
+                    return True
+
+        return False
+
+    def _paint_row_sparkline(
+        self,
+        painter: QPainter,
+        layout_row: LayoutRow,
+        metrics: LayoutMetrics,
+        history: list[TokenSample],
+        now: float,
+    ) -> None:
+        """Compute chart geometry and delegate to paint_sparkline (§5.1)."""
+        cfg = self._cfg.theme.token_rate
+        em = metrics.em
+        chart_width = min(
+            int(cfg.width_em * em),
+            self.width() - metrics.label_x,
+        )
+        chart_right = (
+            self.width()
+            - metrics.pad
+            - metrics.elapsed_width
+            - metrics.text_gap
+        )
+        chart_left = max(metrics.label_x, chart_right - chart_width)
+        chart_top = layout_row.top + 1
+        chart_bottom = layout_row.top + layout_row.height - 1
+
+        rect = QRect(chart_left, chart_top, chart_right - chart_left, chart_bottom - chart_top)
+        paint_sparkline(painter, rect, history, cfg, now)
 
     def _paint_header(
         self,
