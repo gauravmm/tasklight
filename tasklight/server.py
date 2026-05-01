@@ -2,7 +2,6 @@
 
 import ipaddress
 import json
-import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -11,26 +10,16 @@ from PyQt6.QtCore import QThread, pyqtSignal
 PORT = 57017
 _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
 
-# On Windows, accept loopback and WSL2's NAT subnet in addition to loopback.
-_ALLOWED_NETWORKS = [ipaddress.ip_network("127.0.0.0/8")]
-if sys.platform == "win32":
-    _ALLOWED_NETWORKS.append(ipaddress.ip_network("172.16.0.0/12"))
-
-
-def _is_allowed(addr: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(addr)
-        return any(ip in net for net in _ALLOWED_NETWORKS)
-    except ValueError:
-        return False
-
 
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # silence default stderr logging
 
+    def _allowed(self) -> bool:
+        return self.server.hook_server.is_allowed(self.client_address[0])
+
     def do_GET(self):
-        if not _is_allowed(self.client_address[0]):
+        if not self._allowed():
             self._respond(403)
             return
 
@@ -67,7 +56,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.server.hook_server.event_received.emit(payload)
 
     def do_POST(self):
-        if not _is_allowed(self.client_address[0]):
+        if not self._allowed():
             self._respond(403)
             return
 
@@ -97,14 +86,31 @@ class _Handler(BaseHTTPRequestHandler):
 class HookServer(QThread):
     event_received = pyqtSignal(dict)
 
-    def __init__(self, port: int = PORT, parent=None):
+    def __init__(self, port: int = PORT, allowed_subnets: list[str] | None = None, parent=None):
         super().__init__(parent)
         self._port = port
         self._server: HTTPServer | None = None
+        self._allowed_networks: list = []
+        self.update_subnets(allowed_subnets or ["127.0.0.0/8"])
+
+    def update_subnets(self, subnets: list[str]) -> None:
+        compiled = []
+        for s in subnets:
+            try:
+                compiled.append(ipaddress.ip_network(s, strict=False))
+            except ValueError:
+                pass
+        self._allowed_networks = compiled
+
+    def is_allowed(self, addr: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(addr)
+            return any(ip in net for net in self._allowed_networks)
+        except ValueError:
+            return False
 
     def run(self) -> None:
-        bind = "0.0.0.0" if sys.platform == "win32" else "127.0.0.1"
-        self._server = HTTPServer((bind, self._port), _Handler)
+        self._server = HTTPServer(("0.0.0.0", self._port), _Handler)
         self._server.hook_server = self
         self._server.serve_forever()
 

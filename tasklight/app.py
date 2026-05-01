@@ -38,7 +38,7 @@ def run(config_path: Path) -> int:
     cfg = load_config(config_path)
     model = AgentStateModel()
 
-    server = HookServer(port=cfg.port)
+    server = HookServer(port=cfg.port, allowed_subnets=cfg.allowed_subnets)
     server.event_received.connect(model.apply_event)
     server.start()
 
@@ -61,6 +61,7 @@ def run(config_path: Path) -> int:
 
     watcher = ConfigWatcher(config_path)
     watcher.config_changed.connect(overlay.apply_config)
+    watcher.config_changed.connect(lambda c: server.update_subnets(c.allowed_subnets))
 
     tray = create_tray(overlay, context_menu)
     if tray is None:

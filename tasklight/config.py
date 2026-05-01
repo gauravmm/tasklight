@@ -44,6 +44,9 @@ class TimeoutsConfig:
 @dataclass
 class AppConfig:
     port: int = 57017
+    allowed_subnets: list[str] = field(
+        default_factory=lambda: ["127.0.0.0/8", "172.16.0.0/12"]
+    )
     dock: DockConfig = field(default_factory=DockConfig)
     theme: ThemeConfig = field(default_factory=ThemeConfig)
     timeouts: TimeoutsConfig = field(default_factory=TimeoutsConfig)
@@ -64,6 +67,7 @@ def _write_defaults(path: Path) -> None:
         yaml.dump(
             {
                 "port": AppConfig.port,
+                "allowed_subnets": AppConfig().allowed_subnets,
                 "dock": {k: v for k, v in DockConfig().__dict__.items()},
                 "theme": {k: v for k, v in ThemeConfig().__dict__.items()},
                 "timeouts": {k: v for k, v in TimeoutsConfig().__dict__.items()},

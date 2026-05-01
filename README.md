@@ -64,6 +64,13 @@ Current config shape:
 
 ```yaml
 port: 57017
+
+# Subnets allowed to send hook events. Hot-reloads without restart.
+# Add e.g. 192.168.0.0/16 to accept hooks from LAN or a remote SSH forward.
+allowed_subnets:
+  - 127.0.0.0/8    # loopback
+  - 172.16.0.0/12  # WSL2 host-guest NAT range
+
 dock:
   position: BR
   margin: 16
@@ -73,14 +80,16 @@ theme:
   background: "#1e1e1e"
   background_alpha: 0.85
   foreground: "#e8e8e8"
-  dimmed: "#888888"
-  use_system_cursor: true
+  dirname_fg: "#888888"
+  hostname_fg: "#5599cc"
+  system_cursor: true
   animate_spinners: true
-  accent_done: "#44cc77"
-  accent_approval: "#ff4444"
-  approval_row_bg: "#a47000"
+  done_fg: "#44cc77"
+  done_bg: ""
+  approval_fg: "#ff4444"
+  approval_bg: "#a47000"
   font_family: "monospace"
-  font_size_px: 13
+  font_size: 13
   corner_radius: 10
 
 timeouts:
@@ -88,4 +97,4 @@ timeouts:
   exit_grace_s: 30
 ```
 
-Most config changes hot-reload automatically. Port changes still require a restart.
+Most config changes hot-reload automatically. Port changes require a restart.
