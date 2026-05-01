@@ -139,6 +139,12 @@ def paint_sparkline(
 
     window_s = cfg.window_s
     tau_s = cfg.smoothing_tau_s if cfg.smoothing_tau_s > 0.0 else window_s / 30.0
+    # Time-axis curvature (§5.1): 1.0 = linear, >1 stretches recent.
+    curve = max(1.0, cfg.time_curve_exponent)
+    # Render-lag (§5.1): the chart's right edge represents this many
+    # seconds in the past, so the empty-then-jump wedge between hook
+    # fires sits past the right edge instead of inside the chart.
+    display_now = now - max(0.0, cfg.render_lag_s)
 
     mean_rate = compute_mean_rate(history, window_s, now)
     chart_height = chart_bottom - chart_top - 1
@@ -149,8 +155,11 @@ def paint_sparkline(
     # Build polyline of (x, y) for each integer pixel column.
     points: list[QPointF] = []
     for x in range(chart_left, chart_right + 1):
-        # Map pixel column to time (§5.1).
-        t_x = now - ((chart_right - x) / chart_width) * window_s
+        # Map pixel column to time (§5.1). u is 0 at the right edge, 1
+        # at the left; u**curve concentrates pixel density near
+        # display_now.
+        u = (chart_right - x) / chart_width
+        t_x = display_now - window_s * (u ** curve)
 
         if is_in_reset_edge(resets, t_x):
             y = float(chart_bottom)

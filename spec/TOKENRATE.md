@@ -366,14 +366,33 @@ upward.
 compatibility but is not consulted by the renderer; the chart width is
 fixed by row geometry.
 
-The x-axis maps time to pixels:
+The x-axis maps time to pixels with a power curve so recent activity
+gets more pixels than older history, plus a render-lag offset so the
+empty wedge between hook fires sits past the visible right edge:
 
 ```
-t_x = now - ((chart_right - x) / chart_width) * window_s
+display_now = now - render_lag_s
+u           = (chart_right - x) / chart_width   # 0 at right, 1 at left
+t_x         = display_now - window_s * (u ** time_curve_exponent)
 ```
 
-so `x = chart_right` is `now`, `x = chart_left` is `now - window_s`. The
-chart visibly scrolls right-to-left because every repaint advances `now`.
+`time_curve_exponent = 1.0` is linear (each pixel covers
+`window_s / chart_width` seconds). `2.0` (default) means the right half
+of the chart shows the last quarter of `window_s`; `3.0` means the right
+half shows the last eighth. `x = chart_right` is `display_now`,
+`x = chart_left` is `display_now - window_s`, regardless of curve.
+
+`render_lag_s` (default `5.0`) shifts the chart's right edge that many
+seconds into the past. By the time a sample's display time reaches the
+right edge, the sample has actually been recorded for `render_lag_s`
+seconds, so the smoothing kernel evaluates near a real segment instead
+of decaying to zero in the future. Set to `0.0` to render the live
+edge at `now`. Window trim, mean rate, smoothing kernel, and reset
+edges all run on real `t_x` values — only the pixel-to-time mapping
+shifts.
+
+The chart visibly scrolls right-to-left because every repaint advances
+`now` (and therefore `display_now`).
 
 ### 5.2 Y-axis scale
 

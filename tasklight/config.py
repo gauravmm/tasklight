@@ -21,10 +21,20 @@ class DockConfig:
 class TokenRateConfig:
     enabled: bool = True
     window_s: int = 300            # sliding window length
-    width_em: float = 24.0         # chart width in em units
+    width_em: float = 24.0         # chart width in em units (unused; renderer spans full row)
     reset_fraction: float = 0.20   # tokens drop ratio that triggers reset
     scale_headroom: float = 2.5    # y-axis headroom multiplier
     smoothing_tau_s: float = 0.0   # 0 = auto = window_s / 30
+    # Time-axis curvature: 1.0 is linear; >1 stretches recent activity
+    # near the right edge and compresses older samples toward the left.
+    # 2.0 means the right half of the chart shows the last quarter of
+    # window_s; 3.0 the right half shows the last eighth.
+    time_curve_exponent: float = 2.0
+    # Render the chart as if "now" were render_lag_s seconds ago. Hides
+    # the empty-then-jump pattern between hook fires by pushing the
+    # latency wedge past the right edge of the visible chart. Set to
+    # 0.0 to disable.
+    render_lag_s: float = 5.0
     color: str = "#5599cc" # TODO: Split into stroke_color and fill_color
     fill_alpha: float = 0.35
     stroke_alpha: float = 0.0      # 0 = no stroke, just the fill
