@@ -44,7 +44,22 @@ tasklight
 
 ## Hooks
 
-TODO: Mention somewhere that `RemoteForward 57017` (or cli equivalent) will allow you to show this over remote forwards.
+To monitor agents running on a remote machine, use SSH reverse port forwarding so the remote machine's hook calls tunnel back to your local Tasklight:
+
+```bash
+ssh -R 57017:localhost:57017 yourserver
+```
+
+Or add it permanently to `~/.ssh/config`:
+
+```
+Host yourserver
+    RemoteForward 57017 localhost:57017
+```
+
+Once connected, run your agent or `bash tests/manual.sh` on the remote machine and events will appear in your local Tasklight. Pass a `hostname` field in hook payloads to see a per-host prefix in the overlay — the `remote` scenario in `manual.sh` demonstrates this.
+
+Note: `ssh -R 57017 yourserver` (without `localhost:57017`) sets up a reverse SOCKS proxy, not a TCP tunnel — plain HTTP hook calls will silently fail.
 
 This repository includes ready-to-adapt hook files in [hooks/](hooks/) for:
 

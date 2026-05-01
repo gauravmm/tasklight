@@ -11,10 +11,11 @@ The authoritative product/design notes are in [spec/DESIGN.md](spec/DESIGN.md).
 ## Core Commands
 
 ```bash
-uv run python main.py
-uv run python main.py --config PATH
-uv run python -m py_compile main.py tasklight/*.py tasklight/overlay/*.py
+uv run python -m tasklight
+uv run python -m tasklight --config PATH
+uv run python -m py_compile tasklight/*.py tasklight/overlay/*.py
 bash tests/manual.sh
+bash tests/manual.sh 57017 remote   # simulate a remote agent with hostname prefix
 ```
 
 There is currently no formal automated test suite beyond basic compile checks and the manual hook driver.
@@ -71,7 +72,7 @@ Key files:
 
 When changing overlay behavior, validate as many of these as practical:
 
-- app starts with `uv run python main.py`
+- app starts with `uv run python -m tasklight`
 - synthetic events render correctly via `bash tests/manual.sh`
 - spinners update as expected
 - approval rows tint correctly
