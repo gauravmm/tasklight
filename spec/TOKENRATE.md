@@ -131,7 +131,7 @@ The server:
 | `UserPromptSubmit` | `thinking` |
 | `PreToolUse` | `tool_use` |
 | `PostToolUse` | `thinking` |
-| `Notification` (with permission request) | `approval_required` |
+| `PermissionRequest` | `approval_required` |
 | `Stop` | `stop` |
 | `SessionEnd` | `exit` |
 

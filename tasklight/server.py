@@ -20,12 +20,10 @@ _CLAUDE_EVENT_MAP: dict[str, str] = {
     "UserPromptSubmit": "thinking",
     "PreToolUse": "tool_use",
     "PostToolUse": "thinking",
+    "PermissionRequest": "approval_required",
     "Stop": "stop",
     "SessionEnd": "exit",
 }
-
-# Notification with permission_mode implies approval_required.
-_CLAUDE_NOTIFICATION_EVENT = "Notification"
 
 
 def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
@@ -257,13 +255,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         # Map hook_event_name -> internal event.
-        if hook_event_name == _CLAUDE_NOTIFICATION_EVENT:
-            event = "approval_required"
-        else:
-            event = _CLAUDE_EVENT_MAP.get(hook_event_name)
-            if event is None:
-                # Unknown event name — silently ignore.
-                return
+        event = _CLAUDE_EVENT_MAP.get(hook_event_name)
+        if event is None:
+            # Unknown event name — silently ignore.
+            return
 
         # Hostname from header or peer address.
         hostname = self.headers.get("X-Tasklight-Hostname") or self.client_address[0]
