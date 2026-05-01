@@ -7,7 +7,7 @@ name = "tasklight"
 version = "0.1.1"
 description = "Simple desktop widget that monitors active agents."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "pyqt6>=6.11.0",
     "pyyaml>=6.0.3",
