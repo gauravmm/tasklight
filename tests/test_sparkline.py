@@ -193,10 +193,20 @@ class TestIsInResetEdge:
 
 class TestResetRule:
     def _append(self, record, tokens, window_s=300, reset_fraction=0.20):
-        """Call the private helper directly for testing."""
+        """Call the private helper directly for testing.
+
+        ``tokens`` is bucketed under input_tokens for back-compat with
+        scalar-total tests; reset rule operates on the total which is
+        equivalent.
+        """
         from tasklight.model import AgentStateModel
         model = AgentStateModel.__new__(AgentStateModel)
-        model._append_token_sample(record, tokens, window_s=window_s, reset_fraction=reset_fraction)
+        model._append_token_sample(
+            record,
+            input_tokens=tokens,
+            window_s=window_s,
+            reset_fraction=reset_fraction,
+        )
 
     def test_normal_growth_accumulates(self):
         r = make_record()
@@ -204,7 +214,7 @@ class TestResetRule:
         self._append(r, 2000)
         self._append(r, 3000)
         assert len(r.token_history) == 3
-        assert r.token_history[-1].tokens == 3000
+        assert r.token_history[-1].input_tokens == 3000
 
     def test_small_drop_no_reset(self):
         r = make_record()
@@ -220,7 +230,7 @@ class TestResetRule:
         # Drop > 20%: 500 < 3000 * 0.80 = 2400
         self._append(r, 500)
         assert len(r.token_history) == 1
-        assert r.token_history[0].tokens == 500
+        assert r.token_history[0].input_tokens == 500
         # Reset edge recorded as (prev.t, new.t).
         assert len(r.token_resets) == 1
         prev_t, new_t = r.token_resets[0]
@@ -239,7 +249,7 @@ class TestResetRule:
         self._append(r, 1000)
         self._append(r, 799, reset_fraction=0.20)  # 799 < 800
         assert len(r.token_history) == 1
-        assert r.token_history[0].tokens == 799
+        assert r.token_history[0].input_tokens == 799
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +260,9 @@ class TestWindowTrim:
     def _append(self, record, tokens, window_s=300):
         from tasklight.model import AgentStateModel
         model = AgentStateModel.__new__(AgentStateModel)
-        model._append_token_sample(record, tokens, window_s=window_s)
+        model._append_token_sample(
+            record, input_tokens=tokens, window_s=window_s
+        )
 
     def test_old_samples_trimmed(self):
         import time
@@ -304,12 +316,20 @@ class TestExtractUsage:
             }
         })
         result = _extract_usage_from_transcript_tail(line)
-        assert result == 175
+        assert result == {
+            "input_tokens": 100,
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 25,
+        }
 
     def test_missing_sub_fields_default_zero(self):
         line = self._make_line({"message": {"usage": {"input_tokens": 200}}})
         result = _extract_usage_from_transcript_tail(line)
-        assert result == 200
+        assert result == {
+            "input_tokens": 200,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+        }
 
     def test_no_usage_returns_none(self):
         line = self._make_line({"type": "tool_result", "content": "ok"})
@@ -322,7 +342,7 @@ class TestExtractUsage:
         line2 = self._make_line({"message": {"usage": {"input_tokens": 999}}})
         tail = line1 + line2
         result = _extract_usage_from_transcript_tail(tail)
-        assert result == 999
+        assert result["input_tokens"] == 999
 
     def test_truncated_leading_line_skipped(self):
         # Simulate a truncated first line (mid-JSON) followed by valid lines.
@@ -330,7 +350,7 @@ class TestExtractUsage:
         valid = self._make_line({"message": {"usage": {"input_tokens": 42}}})
         tail = truncated + b"\n" + valid
         result = _extract_usage_from_transcript_tail(tail)
-        assert result == 42
+        assert result["input_tokens"] == 42
 
     def test_mixed_lines_no_usage(self):
         lines = b"".join([
@@ -351,7 +371,11 @@ class TestExtractUsage:
             }
         })
         result = _extract_usage_from_transcript_tail(line)
-        assert result == 17000
+        assert result == {
+            "input_tokens": 10000,
+            "cache_creation_tokens": 5000,
+            "cache_read_tokens": 2000,
+        }
 
     def test_curl_at_form_with_filename(self):
         """curl `-F field=@file` adds filename="..." to Content-Disposition.
@@ -394,4 +418,8 @@ class TestExtractUsage:
             },
         })
         result = _extract_usage_from_transcript_tail(line)
-        assert result == 400  # 300 + 100, output_tokens ignored
+        assert result == {
+            "input_tokens": 300,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 100,
+        }

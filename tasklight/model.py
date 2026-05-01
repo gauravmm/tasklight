@@ -17,8 +17,18 @@ class AgentState(Enum):
 
 @dataclass
 class TokenSample:
-    t: float       # time.monotonic() at the hook
-    tokens: int    # cumulative context_tokens reported
+    t: float                       # time.monotonic() at the hook
+    input_tokens: int = 0          # cumulative non-cache input tokens
+    cache_creation_tokens: int = 0 # cumulative tokens written to cache
+    cache_read_tokens: int = 0     # cumulative tokens read from cache
+
+    @property
+    def total(self) -> int:
+        return (
+            self.input_tokens
+            + self.cache_creation_tokens
+            + self.cache_read_tokens
+        )
 
 
 @dataclass
@@ -134,12 +144,17 @@ class AgentStateModel(QAbstractListModel):
         else:
             record.tool_name = None
 
-        # Append token sample if context_tokens present in payload.
-        # The server validates context_tokens before emitting, so we trust
-        # it here — a non-int sneaking through is a server-side bug.
-        ct = payload.get("context_tokens")
-        if isinstance(ct, int) and ct >= 0:
-            self._append_token_sample(record, ct)
+        # Append token sample if usage breakdown is present in payload.
+        # The server validates and constructs the dict before emitting,
+        # so we trust the shape here.
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            self._append_token_sample(
+                record,
+                input_tokens=int(usage.get("input_tokens", 0) or 0),
+                cache_creation_tokens=int(usage.get("cache_creation_tokens", 0) or 0),
+                cache_read_tokens=int(usage.get("cache_read_tokens", 0) or 0),
+            )
 
         row = self._records.index(record)
         idx = self.index(row)
@@ -148,19 +163,26 @@ class AgentStateModel(QAbstractListModel):
     def _append_token_sample(
         self,
         record: AgentRecord,
-        context_tokens: int,
+        input_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
         window_s: int = 300,
         reset_fraction: float = 0.20,
     ) -> None:
         """Append a TokenSample and apply reset/trim rules (§3.2–§3.4)."""
         now = time.monotonic()
-        new_sample = TokenSample(now, context_tokens)
+        new_sample = TokenSample(
+            now,
+            input_tokens=input_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+        )
 
-        # Reset rule §3.3: if tokens dropped > reset_fraction, record the
-        # reset edge [prev.t, new.t] and discard the old history.
+        # Reset rule §3.3: if total tokens dropped > reset_fraction,
+        # record the reset edge [prev.t, new.t] and discard old history.
         if record.token_history:
             prev = record.token_history[-1]
-            if new_sample.tokens < prev.tokens * (1 - reset_fraction):
+            if new_sample.total < prev.total * (1 - reset_fraction):
                 record.token_resets.append((prev.t, new_sample.t))
                 record.token_history.clear()
 

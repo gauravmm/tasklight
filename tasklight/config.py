@@ -35,7 +35,15 @@ class TokenRateConfig:
     # latency wedge past the right edge of the visible chart. Set to
     # 0.0 to disable.
     render_lag_s: float = 5.0
-    color: str = "#5599cc" # TODO: Split into stroke_color and fill_color
+    # Per-component colors for the stacked bands (bottom-up order):
+    #   cache_read    — warm cache reads (cheap, often the bulk)
+    #   cache_creation— writes into cache (loading new context)
+    #   input         — non-cache input tokens (real conversation)
+    cache_read_color: str = "#5599cc"
+    cache_creation_color: str = "#cc8844"
+    input_color: str = "#cccccc"
+    # Legacy alias kept for back-compat with old configs; unused.
+    color: str = "#5599cc"
     fill_alpha: float = 0.35
     stroke_alpha: float = 0.0      # 0 = no stroke, just the fill
 

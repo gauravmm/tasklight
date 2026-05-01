@@ -223,18 +223,27 @@ appends a sample, an event without does not.
 
 ### 3.1 Per-agent sample buffer
 
-Extend `AgentRecord` with one new field:
+Each sample carries a three-component breakdown so the chart can stack
+cache-read, cache-creation, and non-cache input tokens as distinct
+bands (§5.3):
 
 ```python
 @dataclass
 class TokenSample:
-    t: float           # time.monotonic() at the hook
-    tokens: int        # cumulative context_tokens reported
+    t: float                        # time.monotonic() at the hook
+    input_tokens: int = 0           # cumulative non-cache input
+    cache_creation_tokens: int = 0  # cumulative tokens written to cache
+    cache_read_tokens: int = 0      # cumulative tokens read from cache
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.cache_creation_tokens + self.cache_read_tokens
 
 @dataclass
 class AgentRecord:
     ...
     token_history: list[TokenSample] = field(default_factory=list)
+    token_resets: list[tuple[float, float]] = field(default_factory=list)
 ```
 
 The list is kept sorted by `t` (always append-only in receive order, which is
@@ -242,15 +251,20 @@ already monotonic since `apply_event` runs on the main thread).
 
 ### 3.2 Append rule
 
-When a hook payload contains `context_tokens`:
+When a hook payload contains a `usage` dict:
 
 1. Compute `now = time.monotonic()`.
-2. Append `TokenSample(now, context_tokens)` to `record.token_history`.
-3. Apply the **reset rule** (§3.3).
+2. Append `TokenSample(now, **usage)` to `record.token_history`.
+3. Apply the **reset rule** (§3.3) — operates on `sample.total`.
 4. Apply the **window trim** (§3.4).
 5. Mark the row dirty so the overlay repaints.
 
-Hook events without `context_tokens` do not touch the buffer.
+The legacy generic `/hook` endpoint (§2.1) accepts `context_tokens` as
+a single int. The server buckets it under `input_tokens` so the chart
+still renders, just as a single-color band (the cache breakdown is
+unknown to non–Claude-Code sources).
+
+Hook events without usable usage data do not touch the buffer.
 
 ### 3.3 Reset rule (context-window drop)
 
@@ -263,8 +277,9 @@ Algorithm, applied after every append:
 
 - Let `prev` be the last-appended sample before the new one (if any).
 - Let `new` be the just-appended sample.
-- If `new.tokens < prev.tokens * (1 - reset_fraction)`
-  (default `reset_fraction = 0.20`, i.e. a >20% drop):
+- If `new.total < prev.total * (1 - reset_fraction)`
+  (default `reset_fraction = 0.20`, i.e. a >20% drop in cumulative
+  total tokens across all three components):
   - Mark the segment `[prev, new]` as a **reset edge**: it is excluded from
     rate calculations and rendered as a forced gap (chart drops to the
     floor at that x position).
@@ -293,27 +308,30 @@ line instead of disappearing.
 
 ## 4. Rate Calculation
 
-### 4.1 Per-segment rate
+### 4.1 Per-segment rates
 
-Between consecutive samples `a, b` define:
+Each segment between consecutive samples `a, b` carries three signed
+rates, one per component:
 
 ```
-dt    = b.t - a.t                    # always > 0
-dtok  = b.tokens - a.tokens          # signed: + = upload, - = drop
-rate  = dtok / dt                    # tokens per second, signed
+dt              = b.t - a.t                                  # always > 0
+input_rate      = (b.input_tokens - a.input_tokens) / dt
+creation_rate   = (b.cache_creation_tokens - a.cache_creation_tokens) / dt
+read_rate       = (b.cache_read_tokens - a.cache_read_tokens) / dt
+total_rate      = input_rate + creation_rate + read_rate
 ```
 
-`rate` is what the chart plots. Each segment occupies the time interval
-`[a.t, b.t]` on the x-axis.
+The chart plots all three rates as a stacked area (§5.3). `total_rate`
+drives the y-axis auto-scale (§4.2).
 
 ### 4.2 Running average (used for y-axis scale only)
 
-A time-weighted mean of `rate` over the window gives a stable reference for
-auto-scaling the chart's y-axis (so a calm period doesn't render as a flat
-line at the floor):
+A time-weighted mean of `total_rate` over the window gives a stable
+reference for auto-scaling the chart's y-axis (so a calm period doesn't
+render as a flat line at the floor):
 
 ```
-mean_rate = sum(rate_i * dt_i) / sum(dt_i)   over segments in window
+mean_rate = sum(total_rate_i * dt_i) / sum(dt_i)   over segments in window
 ```
 
 When the buffer has fewer than two samples, `mean_rate = 0` and nothing is
@@ -321,17 +339,20 @@ drawn.
 
 ### 4.3 Display smoothing
 
-Per-segment `rate` is jaggy at the granularity of individual hook events.
-Smooth it for display only (the underlying samples are kept raw):
+Per-segment rates are jaggy at the granularity of individual hook
+events. Smooth them for display only (the underlying samples are kept
+raw). All three components are convolved with the same kernel weights
+in a single pass, so they stay in phase:
 
 - For each pixel column `x` of the chart, find the time `t_x` it represents
-  (§5.1) and compute a smoothed rate via an exponential weighting of nearby
+  (§5.1) and compute smoothed rates via an exponential weighting of nearby
   segments, with time constant `tau_s = window_s / 30` (default 10 s for a
   300 s window):
 
   ```
-  smoothed(t) = sum(rate_i * w_i) / sum(w_i)
-      where w_i = dt_i * exp(-|t - midpoint_i| / tau_s)
+  w_i             = dt_i * exp(-|t - midpoint_i| / tau_s)
+  smoothed_X(t)   = sum(rate_X_i * w_i) / sum(w_i)
+                    for X in {input, creation, read}
   ```
 
 - Reset edges (§3.3) are excluded from the kernel entirely, and pixel
@@ -406,25 +427,40 @@ spikes get clipped rather than blowing out the row.
 
 ### 5.3 Painting order
 
-Inside `OverlayWidget.paintEvent`, **before** the existing per-row text
-painting:
+The chart is a **stacked area** — three bands rendered bottom-up so
+the cheap-but-bulky cache reads, occasional cache-creation bursts,
+and steady non-cache input show up as distinct colors:
 
 1. Skip if `record.token_history` has fewer than 2 samples or
    `theme.token_rate.enabled` is false.
 2. Set clip to the chart rect.
-3. Build a polyline of
-   `(x, chart_bottom - max(0, smoothed(t_x)) * y_scale)`
-   for every integer `x` in `[chart_left, chart_right]`. Pixel columns
-   inside a reset edge (§4.3) emit `y = chart_bottom` (floor).
-4. Fill the polygon formed by that polyline closed down to `chart_bottom`
-   using `theme.token_rate.color` at `theme.token_rate.fill_alpha`
-   (default `#5599cc` @ alpha `0.35`).
-5. Optionally stroke the top edge of the polyline at full alpha for a
-   crisper outline (controlled by `theme.token_rate.stroke_alpha`,
-   default `0.0` = off).
+3. For each integer pixel column `x` in `[chart_left, chart_right]`,
+   compute the three smoothed rates at `t_x` (§4.3), clamp each to
+   `>= 0`, and derive three top-of-band y-values:
+   - `y_read     = chart_bottom - read_rate * y_scale`
+   - `y_creation = chart_bottom - (read + creation) * y_scale`
+   - `y_input    = chart_bottom - (read + creation + input) * y_scale`
+
+   Pixel columns inside a reset edge (§4.3) collapse all three to
+   `chart_bottom` (floor).
+4. Fill three polygons in bottom-up order so each band paints over the
+   one below it:
+   - read band: between `y_read` and `chart_bottom`, color
+     `theme.token_rate.cache_read_color` (default `#5599cc`)
+   - creation band: between `y_creation` and `y_read`, color
+     `theme.token_rate.cache_creation_color` (default `#cc8844`)
+   - input band: between `y_input` and `y_creation`, color
+     `theme.token_rate.input_color` (default `#cccccc`)
+
+   All three use `theme.token_rate.fill_alpha` (default `0.35`).
+5. Optionally stroke the top edge of the input band at
+   `theme.token_rate.stroke_alpha` (default `0.0` = off).
 6. Release clip; existing label/glyph/elapsed text paints over the chart.
 
 The fill alpha is intentionally low so text on top stays readable.
+Sources that don't supply a usage breakdown (legacy `/hook` with a
+single `context_tokens` int) are bucketed under `input_tokens`, so
+they render as a single-color top band over an empty floor.
 
 ### 5.4 When to draw on which row
 
@@ -459,14 +495,19 @@ Extend `ThemeConfig` (in `tasklight/config.py`):
 @dataclass
 class TokenRateConfig:
     enabled: bool = True
-    window_s: int = 300            # sliding window length
-    width_em: float = 24.0         # chart width in em units
-    reset_fraction: float = 0.20   # tokens drop ratio that triggers reset
-    scale_headroom: float = 2.5    # y-axis headroom multiplier
-    smoothing_tau_s: float = 0.0   # 0 = auto = window_s / 30
-    color: str = "#5599cc" # TODO: Split into stroke_color and fill_color
+    window_s: int = 300                        # sliding window length
+    width_em: float = 24.0                     # unused; renderer spans full row
+    reset_fraction: float = 0.20               # total drop ratio that triggers reset
+    scale_headroom: float = 2.5                # y-axis headroom multiplier
+    smoothing_tau_s: float = 0.0               # 0 = auto = window_s / 30
+    time_curve_exponent: float = 2.0           # 1.0 = linear; >1 stretches recent
+    render_lag_s: float = 5.0                  # display "now" this many seconds in the past
+    cache_read_color: str = "#5599cc"          # bottom band
+    cache_creation_color: str = "#cc8844"      # middle band
+    input_color: str = "#cccccc"               # top band
+    color: str = "#5599cc"                     # legacy alias, unused
     fill_alpha: float = 0.35
-    stroke_alpha: float = 0.0      # 0 = no stroke, just the fill
+    stroke_alpha: float = 0.0                  # 0 = no stroke, just the fill
 ```
 
 ```python

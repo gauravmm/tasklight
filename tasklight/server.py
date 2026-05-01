@@ -101,11 +101,12 @@ def _parse_context_tokens(value: object) -> int | None:
         return None
 
 
-def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> int | None:
+def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> dict | None:
     """Scan transcript JSONL tail in reverse for the latest message.usage.
 
-    Returns context_tokens = input_tokens + cache_creation_input_tokens +
-    cache_read_input_tokens, or None if not found.
+    Returns a dict with input_tokens, cache_creation_tokens,
+    cache_read_tokens (sub-fields renamed to drop the _input_ infix
+    Anthropic uses), or None if no usable usage block is found.
     """
     if not tail_bytes:
         return None
@@ -124,14 +125,17 @@ def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> int | None:
         if isinstance(usage, dict):
             usage = usage.get("usage")
         if isinstance(usage, dict):
-            input_t = usage.get("input_tokens") or 0
-            cache_creation = usage.get("cache_creation_input_tokens") or 0
-            cache_read = usage.get("cache_read_input_tokens") or 0
-            total = input_t + cache_creation + cache_read
+            input_t = int(usage.get("input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
             # Guard against all-zero "usage" blocks: those would pin the
             # sparkline to zero and don't represent a real measurement.
-            if total > 0:
-                return total
+            if input_t + cache_creation + cache_read > 0:
+                return {
+                    "input_tokens": input_t,
+                    "cache_creation_tokens": cache_creation,
+                    "cache_read_tokens": cache_read,
+                }
     return None
 
 
@@ -179,7 +183,15 @@ class _Handler(BaseHTTPRequestHandler):
 
         ct = _parse_context_tokens(first("context_tokens"))
         if ct is not None:
-            payload["context_tokens"] = ct
+            # Legacy /hook only knows total context_tokens, not the
+            # cache breakdown — bucket it all under input_tokens so the
+            # chart still shows something (will render as a single
+            # input-colored band).
+            payload["usage"] = {
+                "input_tokens": ct,
+                "cache_creation_tokens": 0,
+                "cache_read_tokens": 0,
+            }
 
         self.server.hook_server.event_received.emit(payload)
 
@@ -212,14 +224,18 @@ class _Handler(BaseHTTPRequestHandler):
         if not _REQUIRED_KEYS.issubset(payload):
             return
 
-        # Parse optional context_tokens tolerantly.
-        raw_ct = payload.get("context_tokens")
+        # Parse optional context_tokens tolerantly. Bucket the legacy
+        # single-int form under input_tokens so the chart still
+        # renders.
+        raw_ct = payload.pop("context_tokens", None)
         if raw_ct is not None:
             ct = _parse_context_tokens(raw_ct)
             if ct is not None:
-                payload["context_tokens"] = ct
-            else:
-                payload.pop("context_tokens", None)
+                payload["usage"] = {
+                    "input_tokens": ct,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 0,
+                }
 
         self.server.hook_server.event_received.emit(payload)
 
@@ -293,10 +309,10 @@ class _Handler(BaseHTTPRequestHandler):
             tool_name = hook.get("tool_name") or "tool"
             payload["data"] = {"tool_name": tool_name}
 
-        # Extract context_tokens from transcript tail.
-        ct = _extract_usage_from_transcript_tail(transcript_tail_bytes)
-        if ct is not None:
-            payload["context_tokens"] = ct
+        # Extract usage breakdown from transcript tail.
+        usage = _extract_usage_from_transcript_tail(transcript_tail_bytes)
+        if usage is not None:
+            payload["usage"] = usage
 
         self.server.hook_server.event_received.emit(payload)
 

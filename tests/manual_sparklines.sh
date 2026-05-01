@@ -108,10 +108,17 @@ while true; do
     reset_done=1
     echo "[$i] (RESET) tokens drop"
   else
-    # Growth: input climbs slowly, cache_read climbs faster.
-    input=$((input + 800 + RANDOM % 600))
+    # Growth: cache_read is the bulk (warm reads), cache_creation
+    # bursts every few iterations (loading new context), input
+    # climbs slowly (real conversation).
     cache_read=$((cache_read + 4000 + RANDOM % 3000))
-    cache_creation=$((cache_creation + 100 + RANDOM % 400))
+    if [ $((i % 4)) -eq 0 ]; then
+      # Periodic creation burst — 5x normal — to make the orange band visible.
+      cache_creation=$((cache_creation + 6000 + RANDOM % 3000))
+    else
+      cache_creation=$((cache_creation + 200 + RANDOM % 300))
+    fi
+    input=$((input + 600 + RANDOM % 400))
   fi
 
   total=$((input + cache_read + cache_creation))
