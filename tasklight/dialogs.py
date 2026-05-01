@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication, QMessageBox, QWidget
+from PyQt6.QtWidgets import QMessageBox, QWidget
 
 
 def _git_version() -> str:
@@ -30,16 +30,6 @@ def _git_version() -> str:
     except Exception:
         return ""
 
-
-def confirm_quit(parent: QWidget | None = None) -> None:
-    reply = QMessageBox.question(
-        parent,
-        "Quit Tasklight",
-        "Are you sure you want to quit?",
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-    )
-    if reply == QMessageBox.StandardButton.Yes:
-        QApplication.instance().exit(0)
 
 
 def show_about(parent: QWidget) -> None:

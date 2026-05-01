@@ -4,9 +4,9 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
-from tasklight.dialogs import confirm_quit, show_about
+from tasklight.dialogs import show_about
 
 _ICO_PATH = (
     Path(sys._MEIPASS) / "tasklight.ico"
@@ -25,7 +25,7 @@ def build_context_menu(parent: QWidget) -> QMenu:
     menu.addSeparator()
 
     quit_action = QAction("Quit", menu)
-    quit_action.triggered.connect(lambda: confirm_quit(parent))
+    quit_action.triggered.connect(lambda: QApplication.instance().exit(0))
     menu.addAction(quit_action)
 
     return menu
