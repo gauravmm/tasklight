@@ -36,7 +36,7 @@ with open(_version_file, "w") as _f:
 _qt6_plugins = os.path.join(os.path.dirname(PyQt6.__file__), "Qt6", "plugins")
 _plugin_datas = [
     (os.path.join(_qt6_plugins, sub), f"PyQt6/Qt6/plugins/{sub}")
-    for sub in ("platforms", "styles")
+    for sub in ("platforms", "styles", "imageformats")
     if os.path.isdir(os.path.join(_qt6_plugins, sub))
 ]
 
