@@ -13,7 +13,7 @@ from tasklight.overlay.sparkline import (
     iter_segments,
     smoothed_rate,
 )
-from tasklight.server import _extract_usage_from_transcript_tail
+from tasklight.server import _extract_usage_from_transcript_tail, _parse_multipart
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +352,33 @@ class TestExtractUsage:
         })
         result = _extract_usage_from_transcript_tail(line)
         assert result == 17000
+
+    def test_curl_at_form_with_filename(self):
+        """curl `-F field=@file` adds filename="..." to Content-Disposition.
+
+        The field-name regex must not match `name="..."` as part of
+        `filename="..."` — that would mis-key the field under the
+        filename and silently drop the transcript tail (issue caught in
+        manual sparkline testing).
+        """
+        body = (
+            b"--boundary\r\n"
+            b'Content-Disposition: form-data; name="hook"\r\n'
+            b"Content-Type: application/json\r\n"
+            b"\r\n"
+            b'{"session_id":"abc"}\r\n'
+            b"--boundary\r\n"
+            b'Content-Disposition: form-data; name="transcript_tail"; filename="tmp.abc"\r\n'
+            b"Content-Type: text/plain\r\n"
+            b"\r\n"
+            b"transcript-data\r\n"
+            b"--boundary--\r\n"
+        )
+        fields = _parse_multipart("multipart/form-data; boundary=boundary", body)
+        assert "hook" in fields
+        assert "transcript_tail" in fields
+        assert "tmp.abc" not in fields
+        assert fields["transcript_tail"] == b"transcript-data"
 
     def test_extra_fields_ignored(self):
         line = self._make_line({

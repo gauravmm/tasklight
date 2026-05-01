@@ -73,9 +73,11 @@ def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
         elif field_body.endswith(b"\n"):
             field_body = field_body[:-1]
 
-        # Extract name from Content-Disposition header.
+        # Extract name from Content-Disposition header. Use \b to avoid
+        # matching `filename="..."` as the field name (curl's `-F @file`
+        # form adds a filename= parameter).
         name_match = re.search(
-            rb'Content-Disposition:[^\r\n]*name="([^"]+)"',
+            rb'Content-Disposition:[^\r\n]*\bname="([^"]+)"',
             headers_raw,
             re.IGNORECASE,
         )
