@@ -2,6 +2,8 @@
 
 import ipaddress
 import json
+import logging
+import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -9,6 +11,113 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 PORT = 57017
 _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
+
+_log = logging.getLogger(__name__)
+
+# Mapping from Claude Code hook_event_name to internal event name.
+_CLAUDE_EVENT_MAP: dict[str, str] = {
+    "SessionStart": "start",
+    "UserPromptSubmit": "thinking",
+    "PreToolUse": "tool_use",
+    "PostToolUse": "thinking",
+    "Stop": "stop",
+    "SessionEnd": "exit",
+}
+
+# Notification with permission_mode implies approval_required.
+_CLAUDE_NOTIFICATION_EVENT = "Notification"
+
+
+def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
+    """Minimal multipart/form-data parser; returns field_name -> bytes.
+
+    Only handles the subset needed for /hook/claude-code (text fields and
+    file uploads without nested multipart). Does not handle quoted boundary
+    strings or charset conversion.
+    """
+    # Extract boundary from Content-Type header.
+    m = re.search(r'boundary=([^\s;]+)', content_type)
+    if not m:
+        return {}
+    boundary = m.group(1).strip('"\'').encode()
+
+    delimiter = b"--" + boundary
+    end_marker = b"--" + boundary + b"--"
+
+    fields: dict[str, bytes] = {}
+    # Split on delimiter lines.
+    parts = body.split(delimiter)
+    for part in parts:
+        # Skip preamble, epilogue, and the final "--" marker.
+        stripped = part.strip(b"\r\n")
+        if stripped in (b"", b"--"):
+            continue
+        stripped = stripped.rstrip(b"\r\n--")
+
+        # Split headers from body (double CRLF or double LF).
+        if b"\r\n\r\n" in stripped:
+            headers_raw, _, field_body = stripped.partition(b"\r\n\r\n")
+        elif b"\n\n" in stripped:
+            headers_raw, _, field_body = stripped.partition(b"\n\n")
+        else:
+            continue
+
+        # Extract name from Content-Disposition header.
+        name_match = re.search(
+            rb'Content-Disposition:[^\r\n]*name="([^"]+)"',
+            headers_raw,
+            re.IGNORECASE,
+        )
+        if not name_match:
+            continue
+        name = name_match.group(1).decode(errors="replace")
+        fields[name] = field_body
+
+    return fields
+
+
+def _parse_context_tokens(value: object) -> int | None:
+    """Parse context_tokens field tolerantly; return None on failure."""
+    if value is None:
+        return None
+    try:
+        ct = int(value)
+        return ct if ct >= 0 else None
+    except (ValueError, TypeError):
+        _log.warning("context_tokens parse error (dropped): %r", value)
+        return None
+
+
+def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> int | None:
+    """Scan transcript JSONL tail in reverse for the latest message.usage.
+
+    Returns context_tokens = input_tokens + cache_creation_input_tokens +
+    cache_read_input_tokens, or None if not found.
+    """
+    if not tail_bytes:
+        return None
+
+    lines = tail_bytes.split(b"\n")
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            # Leading line may be truncated mid-JSON; that's expected.
+            continue
+        usage = obj.get("message", {})
+        if isinstance(usage, dict):
+            usage = usage.get("usage")
+        if isinstance(usage, dict):
+            total = (
+                (usage.get("input_tokens") or 0)
+                + (usage.get("cache_creation_input_tokens") or 0)
+                + (usage.get("cache_read_input_tokens") or 0)
+            )
+            return total
+    return None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -53,6 +162,10 @@ class _Handler(BaseHTTPRequestHandler):
             "data": {"tool_name": first("tool_name") or "tool"} if event == "tool_use" else {},
         }
 
+        ct = _parse_context_tokens(first("context_tokens"))
+        if ct is not None:
+            payload["context_tokens"] = ct
+
         self.server.hook_server.event_received.emit(payload)
 
     def do_POST(self):
@@ -60,10 +173,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond(403)
             return
 
-        if self.path != "/hook":
-            self._respond(404)
-            return
+        parsed = urlparse(self.path)
+        path = parsed.path
 
+        if path == "/hook":
+            self._handle_post_hook()
+        elif path == "/hook/claude-code":
+            self._handle_post_claude_code()
+        else:
+            self._respond(404)
+
+    def _handle_post_hook(self) -> None:
+        """Handle POST /hook — generic normalised event."""
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
         self._respond(204)  # respond immediately before any processing
@@ -75,6 +196,95 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not _REQUIRED_KEYS.issubset(payload):
             return
+
+        # Parse optional context_tokens tolerantly.
+        raw_ct = payload.get("context_tokens")
+        if raw_ct is not None:
+            ct = _parse_context_tokens(raw_ct)
+            if ct is not None:
+                payload["context_tokens"] = ct
+            else:
+                payload.pop("context_tokens", None)
+
+        self.server.hook_server.event_received.emit(payload)
+
+    def _handle_post_claude_code(self) -> None:
+        """Handle POST /hook/claude-code — multipart, Claude Code native hook JSON."""
+        content_type = self.headers.get("Content-Type", "")
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+
+        # Always respond before processing.
+        self._respond(204)
+
+        # Parse multipart/form-data using a minimal inline parser.
+        hook_json_bytes: bytes | None = None
+        transcript_tail_bytes: bytes = b""
+
+        try:
+            fields = _parse_multipart(content_type, body)
+            hook_field = fields.get("hook")
+            if hook_field is not None:
+                hook_json_bytes = hook_field
+
+            tail_field = fields.get("transcript_tail")
+            if tail_field is not None:
+                transcript_tail_bytes = tail_field
+        except Exception as exc:
+            _log.warning("claude-code hook: multipart parse error: %s", exc)
+            return
+
+        if hook_json_bytes is None:
+            _log.warning("claude-code hook: missing 'hook' field")
+            return
+
+        # Parse hook JSON.
+        try:
+            hook = json.loads(hook_json_bytes)
+        except (json.JSONDecodeError, ValueError) as exc:
+            _log.warning("claude-code hook: hook JSON parse error: %s", exc)
+            return
+
+        session_id = hook.get("session_id")
+        cwd = hook.get("cwd")
+        hook_event_name = hook.get("hook_event_name")
+
+        if not all([session_id, cwd, hook_event_name]):
+            _log.warning(
+                "claude-code hook: missing required field(s): %s",
+                [k for k in ("session_id", "cwd", "hook_event_name") if not hook.get(k)],
+            )
+            return
+
+        # Map hook_event_name -> internal event.
+        if hook_event_name == _CLAUDE_NOTIFICATION_EVENT:
+            event = "approval_required"
+        else:
+            event = _CLAUDE_EVENT_MAP.get(hook_event_name)
+            if event is None:
+                # Unknown event name — silently ignore.
+                return
+
+        # Hostname from header or peer address.
+        hostname = self.headers.get("X-Tasklight-Hostname") or self.client_address[0]
+
+        payload: dict = {
+            "source": "claude-code",
+            "session_id": session_id,
+            "cwd": cwd,
+            "event": event,
+            "hostname": hostname,
+            "data": {},
+        }
+
+        if event == "tool_use":
+            tool_name = hook.get("tool_name") or "tool"
+            payload["data"] = {"tool_name": tool_name}
+
+        # Extract context_tokens from transcript tail.
+        ct = _extract_usage_from_transcript_tail(transcript_tail_bytes)
+        if ct is not None:
+            payload["context_tokens"] = ct
 
         self.server.hook_server.event_received.emit(payload)
 
