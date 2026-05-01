@@ -55,15 +55,19 @@ def _make_tray_icon_pixmap(size: int = 32) -> QPixmap:
     return pixmap
 
 
+def load_app_icon() -> QIcon:
+    icon = QIcon(str(_ICO_PATH))
+    if icon.isNull():
+        icon = QIcon(_make_tray_icon_pixmap())
+    return icon
+
+
 def create_tray(parent: QWidget, context_menu: QMenu) -> QSystemTrayIcon | None:
     if not QSystemTrayIcon.isSystemTrayAvailable():
         return None
 
     tray = QSystemTrayIcon(parent)
-    icon = QIcon(str(_ICO_PATH))
-    if icon.isNull():
-        icon = QIcon(_make_tray_icon_pixmap())
-    tray.setIcon(icon)
+    tray.setIcon(load_app_icon())
     tray.setToolTip("Tasklight")
     tray.setContextMenu(context_menu)
     tray.activated.connect(

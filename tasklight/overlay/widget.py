@@ -5,7 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QPainter, QPen, QScreen
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QPainter,
+    QPen,
+    QScreen,
+)
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from tasklight.config import AppConfig
@@ -43,7 +51,9 @@ class OverlayWidget(QWidget):
     def __init__(self, model: AgentStateModel, cfg: AppConfig) -> None:
         super().__init__(
             None,
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint,
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool,
         )
         self._model = model
         self._cfg = cfg
@@ -132,7 +142,9 @@ class OverlayWidget(QWidget):
                 )
                 if status.state == AgentState.APPROVAL:
                     painter.fillRect(row_rect, self._colors.approval_bg)
-                elif status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0:
+                elif (
+                    status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0
+                ):
                     painter.fillRect(row_rect, self._colors.done_bg)
 
             baseline = layout_row.top + painter.fontMetrics().ascent()
@@ -157,7 +169,9 @@ class OverlayWidget(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
 
-        self._pressed_row = hit_test(self._layout(QFontMetrics(self.font())), event.position())
+        self._pressed_row = hit_test(
+            self._layout(QFontMetrics(self.font())), event.position()
+        )
         self._press_global_pos = event.globalPosition()
         self._drag_offset = event.globalPosition() - QPointF(self.x(), self.y())
         self._drag_screen = self._screen_for_point(event.globalPosition().toPoint())
@@ -175,7 +189,10 @@ class OverlayWidget(QWidget):
         if (
             self._press_global_pos is None
             or self._drag_offset is None
-            or (isinstance(self._pressed_row, AgentRow) and self._pressed_row.record_session_id)
+            or (
+                isinstance(self._pressed_row, AgentRow)
+                and self._pressed_row.record_session_id
+            )
         ):
             return
 
@@ -276,7 +293,8 @@ class OverlayWidget(QWidget):
             or (
                 isinstance(layout_row.row, HeaderRow)
                 and layout_row.row.summary is not None
-                and layout_row.row.summary.state in (AgentState.THINKING, AgentState.TOOL)
+                and layout_row.row.summary.state
+                in (AgentState.THINKING, AgentState.TOOL)
             )
             for layout_row in layout.rows
         )
@@ -456,7 +474,9 @@ class OverlayWidget(QWidget):
             "T": abs(point.y() - geometry.top()),
             "B": abs(geometry.bottom() - point.y()),
         }
-        nearest_edge, nearest_distance = min(distances.items(), key=lambda item: item[1])
+        nearest_edge, nearest_distance = min(
+            distances.items(), key=lambda item: item[1]
+        )
         if nearest_distance > self._SNAP_EDGE_THRESHOLD_PX:
             return None
 

@@ -16,7 +16,7 @@ from tasklight.config import AppConfig, ConfigWatcher, load_config, save_config
 from tasklight.model import AgentStateModel
 from tasklight.overlay import OverlayWidget
 from tasklight.server import HookServer
-from tasklight.tray import build_context_menu, create_tray
+from tasklight.tray import build_context_menu, create_tray, load_app_icon
 
 
 def _install_excepthook() -> None:
@@ -32,8 +32,14 @@ def run(config_path: Path) -> int:
     if sys.platform != "win32":
         os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Tasklight")
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(load_app_icon())
 
     cfg = load_config(config_path)
     model = AgentStateModel()
