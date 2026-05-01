@@ -1,5 +1,7 @@
 # <img src="spec/logo.png" height="32" /> Tasklight
 
+<img src="spec/showcase.gif" alt="Tasklight overlay showing agents in various states" />
+
 Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time.
 
 It listens for hook events over HTTP and shows per-agent state such as:
@@ -98,7 +100,7 @@ allowed_subnets:
 dock:
   position: BR
   margin: 16
-  width: 360
+  width: 240
 
 theme:
   background: "#1e1e1e"
