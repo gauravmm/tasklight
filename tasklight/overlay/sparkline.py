@@ -24,17 +24,10 @@ class Segment:
     rate: float       # tokens / second (signed); always 0.0 for reset edges
     midpoint: float   # (t_a + t_b) / 2
     dt: float         # t_b - t_a
-    is_reset: bool    # True when this segment was a reset edge
 
 
 def iter_segments(history: list[TokenSample]) -> Iterable[Segment]:
-    """Yield Segment objects for consecutive sample pairs.
-
-    Reset edges (§3.3) are yielded with rate=0 and is_reset=True.
-    Because the reset rule in model.py truncates history on every reset,
-    the current buffer never actually contains a reset edge — but the
-    iterator signature is preserved for completeness and for testing.
-    """
+    """Yield Segment objects for consecutive sample pairs."""
     for i in range(len(history) - 1):
         a = history[i]
         b = history[i + 1]
@@ -44,7 +37,7 @@ def iter_segments(history: list[TokenSample]) -> Iterable[Segment]:
         dtok = b.tokens - a.tokens
         rate = dtok / dt
         midpoint = (a.t + b.t) / 2.0
-        yield Segment(a.t, b.t, rate, midpoint, dt, False)
+        yield Segment(a.t, b.t, rate, midpoint, dt)
 
 
 def compute_mean_rate(
@@ -66,8 +59,6 @@ def compute_mean_rate(
     for seg in iter_segments(history):
         if seg.t_b < cutoff:
             continue
-        if seg.is_reset:
-            continue
         weighted_sum += seg.rate * seg.dt
         total_weight += seg.dt
 
@@ -84,7 +75,6 @@ def smoothed_rate(
     """Exponential-kernel smoothed rate at time t (§4.3).
 
     Only segments within ~5*tau_s of t contribute meaningfully.
-    Reset edges are excluded.
     """
     if len(history) < 2:
         return 0.0
@@ -96,8 +86,6 @@ def smoothed_rate(
     weighted_sum = 0.0
 
     for seg in iter_segments(history):
-        if seg.is_reset:
-            continue
         if seg.midpoint < cutoff_low:
             continue
         if seg.midpoint > cutoff_high:
@@ -112,15 +100,10 @@ def smoothed_rate(
     return weighted_sum / total_weight
 
 
-def _is_in_reset_edge(history: list[TokenSample], t: float) -> bool:
-    """Return True if t falls inside a reset segment in history.
-
-    Since model.py truncates on reset, the current buffer contains no
-    reset edges — this always returns False for a normal buffer. Kept for
-    completeness and for potential future use if the model changes.
-    """
-    for seg in iter_segments(history):
-        if seg.is_reset and seg.t_a <= t <= seg.t_b:
+def is_in_reset_edge(resets: list[tuple[float, float]], t: float) -> bool:
+    """Return True if t falls inside any recorded reset edge interval."""
+    for t_a, t_b in resets:
+        if t_a <= t <= t_b:
             return True
     return False
 
@@ -129,13 +112,16 @@ def paint_sparkline(
     painter: QPainter,
     rect: QRect,
     history: list[TokenSample],
+    resets: list[tuple[float, float]],
     cfg: TokenRateConfig,
     now: float | None = None,
 ) -> None:
     """Paint a token-rate sparkline filling ``rect`` (§5).
 
     ``rect`` is the row's chart rectangle in widget-local coordinates.
-    Does nothing if fewer than 2 samples or ``cfg.enabled`` is False.
+    ``resets`` is the list of reset-edge time intervals to render as
+    forced floor segments. Does nothing if fewer than 2 samples or
+    ``cfg.enabled`` is False.
     """
     if not cfg.enabled or len(history) < 2:
         return
@@ -166,7 +152,7 @@ def paint_sparkline(
         # Map pixel column to time (§5.1).
         t_x = now - ((chart_right - x) / chart_width) * window_s
 
-        if _is_in_reset_edge(history, t_x):
+        if is_in_reset_edge(resets, t_x):
             y = float(chart_bottom)
         else:
             rate = smoothed_rate(history, t_x, tau_s)

@@ -9,6 +9,7 @@ from tasklight.model import AgentRecord, AgentState, TokenSample
 from tasklight.overlay.sparkline import (
     Segment,
     compute_mean_rate,
+    is_in_reset_edge,
     iter_segments,
     smoothed_rate,
 )
@@ -60,7 +61,6 @@ class TestIterSegments:
         assert s.dt == pytest.approx(10.0)
         assert s.rate == pytest.approx(100.0)  # (2000-1000)/10
         assert s.midpoint == pytest.approx(5.0)
-        assert not s.is_reset
 
     def test_three_samples_two_segments(self):
         h = make_history((0.0, 0), (5.0, 500), (10.0, 1500))
@@ -153,13 +153,38 @@ class TestSmoothedRate:
         result = smoothed_rate(h, 10.0, 5.0)
         assert result == pytest.approx(150.0)
 
-    def test_non_negative_minimum(self):
-        # Negative rate segment: smoothed value may go negative, but the
-        # chart clamps it; here we just test that the function itself can
-        # return negative values (clamping is done in paint_sparkline).
+    def test_negative_rate_passthrough(self):
+        # smoothed_rate itself does not clamp; the painter does. Confirm
+        # negative segment rates flow through unmodified.
         h = make_history((0.0, 5000), (10.0, 4000))
         result = smoothed_rate(h, 5.0, 10.0)
         assert result == pytest.approx(-100.0)
+
+
+# ---------------------------------------------------------------------------
+# is_in_reset_edge
+# ---------------------------------------------------------------------------
+
+class TestIsInResetEdge:
+    def test_empty_resets(self):
+        assert not is_in_reset_edge([], 5.0)
+
+    def test_inside_interval(self):
+        assert is_in_reset_edge([(10.0, 20.0)], 15.0)
+
+    def test_at_boundaries(self):
+        assert is_in_reset_edge([(10.0, 20.0)], 10.0)
+        assert is_in_reset_edge([(10.0, 20.0)], 20.0)
+
+    def test_outside_interval(self):
+        assert not is_in_reset_edge([(10.0, 20.0)], 9.99)
+        assert not is_in_reset_edge([(10.0, 20.0)], 20.01)
+
+    def test_multiple_intervals(self):
+        resets = [(10.0, 20.0), (50.0, 55.0)]
+        assert is_in_reset_edge(resets, 15.0)
+        assert is_in_reset_edge(resets, 52.0)
+        assert not is_in_reset_edge(resets, 30.0)
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +221,11 @@ class TestResetRule:
         self._append(r, 500)
         assert len(r.token_history) == 1
         assert r.token_history[0].tokens == 500
+        # Reset edge recorded as (prev.t, new.t).
+        assert len(r.token_resets) == 1
+        prev_t, new_t = r.token_resets[0]
+        assert new_t > prev_t
+        assert new_t == pytest.approx(r.token_history[0].t)
 
     def test_exactly_at_threshold_no_reset(self):
         # 800 = 1000 * (1 - 0.20); not strictly less than => no reset

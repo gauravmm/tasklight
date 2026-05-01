@@ -159,8 +159,9 @@ class OverlayWidget(QWidget):
             ):
                 history = self._token_history_for(row.record_session_id)
                 if len(history) >= 2:
+                    resets = self._token_resets_for(row.record_session_id)
                     self._paint_row_sparkline(
-                        painter, layout_row, metrics, history, now
+                        painter, layout_row, metrics, history, resets, now
                     )
 
             baseline = layout_row.top + painter.fontMetrics().ascent()
@@ -305,6 +306,13 @@ class OverlayWidget(QWidget):
                 return record.token_history
         return []
 
+    def _token_resets_for(self, session_id: str) -> list[tuple[float, float]]:
+        """Return the token_resets list for the given session_id, or empty."""
+        for record in self._model.records():
+            if record.session_id == session_id:
+                return record.token_resets
+        return []
+
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
         # Spinners need the timer if animate_spinners is on.
         spinner_active = self._cfg.theme.animate_spinners and any(
@@ -341,6 +349,7 @@ class OverlayWidget(QWidget):
         layout_row: LayoutRow,
         metrics: LayoutMetrics,
         history: list[TokenSample],
+        resets: list[tuple[float, float]],
         now: float,
     ) -> None:
         """Compute chart geometry and delegate to paint_sparkline (§5.1)."""
@@ -361,7 +370,7 @@ class OverlayWidget(QWidget):
         chart_bottom = layout_row.top + layout_row.height - 1
 
         rect = QRect(chart_left, chart_top, chart_right - chart_left, chart_bottom - chart_top)
-        paint_sparkline(painter, rect, history, cfg, now)
+        paint_sparkline(painter, rect, history, resets, cfg, now)
 
     def _paint_header(
         self,

@@ -37,6 +37,10 @@ class AgentRecord:
     started_at: float = field(default_factory=time.monotonic)
     dismissed: bool = False
     token_history: list[TokenSample] = field(default_factory=list)
+    # (t_a, t_b) reset-edge intervals: time of the discarded prev sample
+    # to time of the new baseline. Pixels in this interval render at the
+    # chart floor so the discontinuity stays visible.
+    token_resets: list[tuple[float, float]] = field(default_factory=list)
 
 
 # Maps incoming event names to the next AgentState (None = no change / special).
@@ -158,10 +162,12 @@ class AgentStateModel(QAbstractListModel):
         now = time.monotonic()
         new_sample = TokenSample(now, context_tokens)
 
-        # Reset rule §3.3: if tokens dropped > reset_fraction, keep only new.
+        # Reset rule §3.3: if tokens dropped > reset_fraction, record the
+        # reset edge [prev.t, new.t] and discard the old history.
         if record.token_history:
             prev = record.token_history[-1]
             if new_sample.tokens < prev.tokens * (1 - reset_fraction):
+                record.token_resets.append((prev.t, new_sample.t))
                 record.token_history.clear()
 
         record.token_history.append(new_sample)
@@ -170,6 +176,10 @@ class AgentStateModel(QAbstractListModel):
         cutoff = now - window_s
         while len(record.token_history) > 2 and record.token_history[0].t < cutoff:
             record.token_history.pop(0)
+        # Trim reset edges that have fully scrolled off the window.
+        record.token_resets = [
+            (a, b) for (a, b) in record.token_resets if b >= cutoff
+        ]
 
     def reset(self) -> None:
         if not self._records:
