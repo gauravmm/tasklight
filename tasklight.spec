@@ -4,13 +4,25 @@ import subprocess
 import PyQt6
 
 def _build_version():
+    import shutil, sys as _sys
+    _GIT_FALLBACK = [
+        r"C:\Program Files\Git\cmd\git.exe",
+        r"C:\Program Files\Git\bin\git.exe",
+    ]
+    git = shutil.which("git")
+    if not git and _sys.platform == "win32":
+        import os
+        git = next((p for p in _GIT_FALLBACK if os.path.isfile(p)), None)
+    if not git:
+        return ""
+    _kw = dict(stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if _sys.platform == "win32":
+        _kw["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
         short = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL
+            [git, "rev-parse", "--short", "HEAD"], text=True, **_kw
         ).strip()
-        dirty = subprocess.call(
-            ["git", "diff", "--quiet"], stderr=subprocess.DEVNULL
-        ) != 0
+        dirty = subprocess.call([git, "diff", "--quiet"], **_kw) != 0
         return f"{short}{'-dirty' if dirty else ''}"
     except Exception:
         return ""
