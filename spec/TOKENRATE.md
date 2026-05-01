@@ -493,21 +493,58 @@ Extend `ThemeConfig` (in `tasklight/config.py`):
 
 ```python
 @dataclass
+class SamplingConfig:
+    window_s: int = 300              # sliding window length
+    reset_fraction: float = 0.20     # total drop ratio that triggers reset
+    smoothing_tau_s: float = 0.0     # 0 = auto = window_s / 30
+
+@dataclass
+class BandsConfig:
+    cache_read_color: str = "#5599cc"
+    cache_creation_color: str = "#ff9933"
+    input_color: str = "#cccccc"
+    fill_alpha: float = 0.35
+    stroke_alpha: float = 0.0
+    scale_headroom: float = 2.5
+
+@dataclass
+class TimeAxisConfig:
+    time_curve_exponent: float = 2.0
+    render_lag_s: float = 5.0
+    left_fade_fraction: float = 0.15
+
+@dataclass
+class ContextLineConfig:
+    height_px: int = 1
+    alpha: float = 0.65
+    color: str = ""
+
+@dataclass
+class ContextMarkerConfig:
+    size_px: int = 4
+
+@dataclass
+class ContextTintConfig:
+    alpha: float = 0.10
+    color_safe: str = "#ffffff"
+    color_warn: str = "#ffaa00"
+    warn_start_fraction: float = 0.60
+    warn_full_fraction: float = 0.80
+
+@dataclass
+class ContextConfig:
+    window_max: int = 200000
+    line: ContextLineConfig = field(default_factory=ContextLineConfig)
+    marker: ContextMarkerConfig = field(default_factory=ContextMarkerConfig)
+    tint: ContextTintConfig = field(default_factory=ContextTintConfig)
+
+@dataclass
 class TokenRateConfig:
     enabled: bool = True
-    window_s: int = 300                        # sliding window length
-    width_em: float = 24.0                     # unused; renderer spans full row
-    reset_fraction: float = 0.20               # total drop ratio that triggers reset
-    scale_headroom: float = 2.5                # y-axis headroom multiplier
-    smoothing_tau_s: float = 0.0               # 0 = auto = window_s / 30
-    time_curve_exponent: float = 2.0           # 1.0 = linear; >1 stretches recent
-    render_lag_s: float = 5.0                  # display "now" this many seconds in the past
-    cache_read_color: str = "#5599cc"          # bottom band
-    cache_creation_color: str = "#cc8844"      # middle band
-    input_color: str = "#cccccc"               # top band
-    color: str = "#5599cc"                     # legacy alias, unused
-    fill_alpha: float = 0.35
-    stroke_alpha: float = 0.0                  # 0 = no stroke, just the fill
+    sampling: SamplingConfig = field(default_factory=SamplingConfig)
+    bands: BandsConfig = field(default_factory=BandsConfig)
+    time_axis: TimeAxisConfig = field(default_factory=TimeAxisConfig)
+    context: ContextConfig = field(default_factory=ContextConfig)
 ```
 
 ```python

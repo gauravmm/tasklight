@@ -61,5 +61,5 @@ def glyph_for_state(
         color = hex_color("#d97757") if source == "claude-code" else hex_color("#88ddff")
         return glyph, color
     if state == AgentState.APPROVAL:
-        return "●", hex_color(theme.approval_fg)
-    return "●", hex_color(theme.done_fg)
+        return "●", hex_color(theme.states.approval_fg)
+    return "●", hex_color(theme.states.done_fg)

@@ -138,6 +138,37 @@ def is_in_reset_edge(resets: list[tuple[float, float]], t: float) -> bool:
     return False
 
 
+def _lerp_color(c_safe: QColor, c_warn: QColor, t: float) -> QColor:
+    """Linearly interpolate two QColors in RGB space."""
+    t = max(0.0, min(1.0, t))
+    return QColor(
+        int(c_safe.red() * (1.0 - t) + c_warn.red() * t),
+        int(c_safe.green() * (1.0 - t) + c_warn.green() * t),
+        int(c_safe.blue() * (1.0 - t) + c_warn.blue() * t),
+    )
+
+
+def _fill_threshold_color(cfg: TokenRateConfig, fill_fraction: float) -> QColor:
+    """Color for the fill-driven indicators (tint + line).
+
+    Below ``tint_warn_start_fraction`` the color is ``tint_color_safe``;
+    above ``tint_warn_full_fraction`` it's ``tint_color_warn``; between
+    the two it lerps linearly.
+    """
+    tint = cfg.context.tint
+    start = tint.warn_start_fraction
+    full = tint.warn_full_fraction
+    if full <= start:
+        t = 1.0 if fill_fraction >= full else 0.0
+    elif fill_fraction <= start:
+        t = 0.0
+    elif fill_fraction >= full:
+        t = 1.0
+    else:
+        t = (fill_fraction - start) / (full - start)
+    return _lerp_color(QColor(tint.color_safe), QColor(tint.color_warn), t)
+
+
 def paint_sparkline(
     painter: QPainter,
     rect: QRect,
@@ -167,19 +198,31 @@ def paint_sparkline(
     if chart_width <= 0:
         return
 
-    window_s = cfg.window_s
-    tau_s = cfg.smoothing_tau_s if cfg.smoothing_tau_s > 0.0 else window_s / 30.0
-    curve = max(1.0, cfg.time_curve_exponent)
-    display_now = now - max(0.0, cfg.render_lag_s)
+    sampling = cfg.sampling
+    bands = cfg.bands
+    time_axis = cfg.time_axis
+    context = cfg.context
+    line_cfg = context.line
+    marker_cfg = context.marker
+    tint_cfg = context.tint
+
+    window_s = sampling.window_s
+    tau_s = sampling.smoothing_tau_s if sampling.smoothing_tau_s > 0.0 else window_s / 30.0
+    curve = max(1.0, time_axis.time_curve_exponent)
+    display_now = now - max(0.0, time_axis.render_lag_s)
 
     # Effective context-window cap: prefer the per-record value supplied
     # by the caller (derived from the latest hook payload's model
     # field); fall back to the config default if that's unknown.
-    effective_cwm = context_window_max if context_window_max > 0 else cfg.context_window_max
+    effective_cwm = context_window_max if context_window_max > 0 else context.window_max
 
     # Reserve the bottom rows for the context-window line if enabled.
-    show_context_line = effective_cwm > 0 and cfg.context_line_height_px > 0
-    line_h = cfg.context_line_height_px if show_context_line else 0
+    # The triangular marker (if enabled) overlaps the bands rather
+    # than taking its own reserved row.
+    show_context_line = effective_cwm > 0 and line_cfg.height_px > 0
+    line_h = line_cfg.height_px if show_context_line else 0
+    show_marker = show_context_line and marker_cfg.size_px > 0
+    marker_h = marker_cfg.size_px if show_marker else 0
     # 1px gap between bands and line so the line reads as separate.
     bands_bottom = chart_bottom - (line_h + 1 if show_context_line else 0)
 
@@ -188,7 +231,14 @@ def paint_sparkline(
     if chart_height <= 0:
         # Row too short for both bands and line; skip bands.
         chart_height = 0
-    y_scale = chart_height / max(mean_rate * cfg.scale_headroom, 1.0) if chart_height > 0 else 0.0
+    y_scale = chart_height / max(mean_rate * bands.scale_headroom, 1.0) if chart_height > 0 else 0.0
+
+    # Compute fill_fraction once: drives the background tint and the
+    # line color. Falls back to 0 if context_window_max is unknown.
+    fill_fraction = 0.0
+    if effective_cwm > 0 and history:
+        fill_fraction = min(1.0, history[-1].total / effective_cwm)
+    threshold_color = _fill_threshold_color(cfg, fill_fraction)
 
     # For each pixel column, compute three cumulative top-of-band y values:
     # y_read (top of read band), y_creation (top of creation band),
@@ -228,14 +278,42 @@ def paint_sparkline(
     painter.setClipRect(rect)
     painter.setPen(QColor(0, 0, 0, 0))
 
-    # Left-edge fade: a horizontal alpha gradient applied to every band.
-    # 0% alpha at chart_left, fade_alpha (= cfg.fill_alpha) at the
-    # fade-in stop, constant from there to chart_right.
-    fade_frac = max(0.0, min(1.0, cfg.left_fade_fraction))
+    # Left-edge fade fraction is shared by tint, bands, and line.
+    fade_frac = max(0.0, min(1.0, time_axis.left_fade_fraction))
 
+    # Ambient tint: fills only the filled portion of the chart rect
+    # (left edge to fill-fraction position) with the threshold-derived
+    # color at low alpha. Spatially aligned with the line indicator
+    # at the top, and uses the same left-edge fade as the bands.
+    # Painted FIRST so bands and line draw over it.
+    if tint_cfg.alpha > 0.0 and effective_cwm > 0 and fill_fraction > 0.0:
+        tint = QColor(threshold_color)
+        tint.setAlphaF(tint_cfg.alpha)
+        tint_rect = QRectF(
+            float(chart_left),
+            float(chart_top),
+            float(chart_width * fill_fraction),
+            float(rect.height()),
+        )
+        if fade_frac > 0.0:
+            gradient = QLinearGradient(
+                QPointF(float(chart_left), 0.0),
+                QPointF(float(chart_right), 0.0),
+            )
+            transparent = QColor(tint)
+            transparent.setAlphaF(0.0)
+            gradient.setColorAt(0.0, transparent)
+            gradient.setColorAt(fade_frac, tint)
+            gradient.setColorAt(1.0, tint)
+            painter.fillRect(tint_rect, QBrush(gradient))
+        else:
+            painter.fillRect(tint_rect, tint)
+
+    # Left-edge fade applied to every band: 0% alpha at chart_left,
+    # fill_alpha at the fade-in stop, constant to chart_right.
     def band_brush(color_hex: str) -> QBrush:
         color = QColor(color_hex)
-        color.setAlphaF(cfg.fill_alpha)
+        color.setAlphaF(bands.fill_alpha)
         if fade_frac <= 0.0 or chart_width <= 0:
             return QBrush(color)
         gradient = QLinearGradient(
@@ -267,13 +345,13 @@ def paint_sparkline(
         painter.drawPolygon(QPolygonF(polygon))
 
     if chart_height > 0:
-        fill_band(y_read, None, cfg.cache_read_color)
-        fill_band(y_creation, y_read, cfg.cache_creation_color)
-        fill_band(y_input, y_creation, cfg.input_color)
+        fill_band(y_read, None, bands.cache_read_color)
+        fill_band(y_creation, y_read, bands.cache_creation_color)
+        fill_band(y_input, y_creation, bands.input_color)
 
-        if cfg.stroke_alpha > 0.0:
-            stroke_color = QColor(cfg.input_color)
-            stroke_color.setAlphaF(cfg.stroke_alpha)
+        if bands.stroke_alpha > 0.0:
+            stroke_color = QColor(bands.input_color)
+            stroke_color.setAlphaF(bands.stroke_alpha)
             from PyQt6.QtGui import QPen
             painter.setPen(QPen(stroke_color, 1.0))
             painter.setBrush(QColor(0, 0, 0, 0))
@@ -287,12 +365,12 @@ def paint_sparkline(
     # Rendered with the same left-fade so it visually anchors to the
     # band stack above it.
     if show_context_line:
-        latest_total = history[-1].total
-        fill_fraction = min(1.0, latest_total / effective_cwm)
         if fill_fraction > 0.0:
-            line_color_hex = cfg.context_line_color or cfg.input_color
-            line_color = QColor(line_color_hex)
-            line_color.setAlphaF(cfg.context_line_alpha)
+            if line_cfg.color:
+                line_color = QColor(line_cfg.color)
+            else:
+                line_color = QColor(threshold_color)
+            line_color.setAlphaF(line_cfg.alpha)
             line_w = chart_width * fill_fraction
             line_y = chart_bottom - line_h + 1
             line_rect = QRectF(
@@ -312,5 +390,26 @@ def paint_sparkline(
             else:
                 painter.setBrush(line_color)
             painter.drawRect(line_rect)
+
+            # Triangular marker pointing down at the head of the bar.
+            # Apex sits 1 px above the line; base is `marker_h` px above
+            # the apex. Half-width equal to height for a clean arrow.
+            if show_marker:
+                apex_x = chart_left + chart_width * fill_fraction
+                apex_y = line_y - 1
+                base_y = apex_y - marker_h
+                half_w = marker_h
+                marker_color = QColor(line_color)
+                marker_color.setAlphaF(line_cfg.alpha)
+                painter.setBrush(marker_color)
+                painter.drawPolygon(
+                    QPolygonF(
+                        [
+                            QPointF(apex_x - half_w, float(base_y)),
+                            QPointF(apex_x + half_w, float(base_y)),
+                            QPointF(apex_x, float(apex_y)),
+                        ]
+                    )
+                )
 
     painter.restore()

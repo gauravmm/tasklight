@@ -32,6 +32,7 @@ class OverlayColors:
     foreground: QColor
     dirname_fg: QColor
     hostname_fg: QColor
+    elapsed_fg: QColor
     approval_bg: QColor
     done_bg: QColor
 
@@ -127,8 +128,8 @@ class OverlayWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(
             self.rect(),
-            self._cfg.theme.corner_radius,
-            self._cfg.theme.corner_radius,
+            self._cfg.theme.window.corner_radius,
+            self._cfg.theme.window.corner_radius,
         )
 
         metrics = layout.metrics
@@ -171,7 +172,7 @@ class OverlayWidget(QWidget):
             else:
                 self._paint_agent_row(painter, row, baseline, layout)
 
-        if not self._cfg.theme.system_cursor:
+        if not self._cfg.theme.behavior.system_cursor:
             self._draw_cursor(painter)
         painter.end()
 
@@ -199,7 +200,7 @@ class OverlayWidget(QWidget):
         if event is None:
             return
 
-        if not self._cfg.theme.system_cursor:
+        if not self._cfg.theme.behavior.system_cursor:
             self._cursor_pos = event.position()
             self._cursor_hide.start()
             self.update()
@@ -269,7 +270,7 @@ class OverlayWidget(QWidget):
 
     def enterEvent(self, event) -> None:  # noqa: N802
         if (
-            not self._cfg.theme.system_cursor
+            not self._cfg.theme.behavior.system_cursor
             and event is not None
             and hasattr(event, "position")
         ):
@@ -281,8 +282,8 @@ class OverlayWidget(QWidget):
         self.update()
 
     def _font(self) -> QFont:
-        font = QFont(self._cfg.theme.font_family)
-        font.setPixelSize(self._cfg.theme.font_size)
+        font = QFont(self._cfg.theme.text.font_family)
+        font.setPixelSize(self._cfg.theme.text.font_size)
         return font
 
     def _layout(self, fm: QFontMetrics) -> OverlayLayout:
@@ -292,12 +293,13 @@ class OverlayWidget(QWidget):
     def _build_colors(self) -> OverlayColors:
         theme = self._cfg.theme
         return OverlayColors(
-            background=hex_color(theme.background, theme.background_alpha),
-            foreground=hex_color(theme.foreground),
-            dirname_fg=hex_color(theme.dirname_fg),
-            hostname_fg=hex_color(theme.hostname_fg),
-            approval_bg=hex_color(theme.approval_bg),
-            done_bg=hex_color(theme.done_bg) if theme.done_bg else QColor(0, 0, 0, 0),
+            background=hex_color(theme.window.background, theme.window.background_alpha),
+            foreground=hex_color(theme.text.foreground),
+            dirname_fg=hex_color(theme.text.dirname_fg),
+            hostname_fg=hex_color(theme.text.hostname_fg),
+            elapsed_fg=hex_color(theme.text.elapsed_fg or theme.text.dirname_fg),
+            approval_bg=hex_color(theme.states.approval_bg),
+            done_bg=hex_color(theme.states.done_bg) if theme.states.done_bg else QColor(0, 0, 0, 0),
         )
 
     def _token_history_for(self, session_id: str) -> list[TokenSample]:
@@ -323,7 +325,7 @@ class OverlayWidget(QWidget):
 
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
         # Spinners need the timer if animate_spinners is on.
-        spinner_active = self._cfg.theme.animate_spinners and any(
+        spinner_active = self._cfg.theme.behavior.animate_spinners and any(
             (
                 isinstance(layout_row.row, AgentRow)
                 and layout_row.row.state in (AgentState.THINKING, AgentState.TOOL)
@@ -421,7 +423,7 @@ class OverlayWidget(QWidget):
             row.summary.source,
             row.summary.state,
             frame=self._frame,
-            animate=self._cfg.theme.animate_spinners,
+            animate=self._cfg.theme.behavior.animate_spinners,
             theme=self._cfg.theme,
         )
         painter.setPen(QPen(glyph_color))
@@ -469,7 +471,7 @@ class OverlayWidget(QWidget):
             row.source,
             row.state,
             frame=self._frame,
-            animate=self._cfg.theme.animate_spinners,
+            animate=self._cfg.theme.behavior.animate_spinners,
             theme=self._cfg.theme,
         )
         painter.setPen(QPen(glyph_color))
@@ -482,7 +484,7 @@ class OverlayWidget(QWidget):
             baseline,
             elide(fm, row.label, metrics.label_width),
         )
-        painter.setPen(QPen(self._colors.dirname_fg))
+        painter.setPen(QPen(self._colors.elapsed_fg))
         painter.drawText(elapsed_x, baseline, row.elapsed)
 
     def _draw_cursor(self, painter: QPainter) -> None:
@@ -502,8 +504,8 @@ class OverlayWidget(QWidget):
 
     def _apply_cursor_mode(self) -> None:
         self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.setMouseTracking(not self._cfg.theme.system_cursor)
-        if self._cfg.theme.system_cursor:
+        self.setMouseTracking(not self._cfg.theme.behavior.system_cursor)
+        if self._cfg.theme.behavior.system_cursor:
             self._cursor_pos = None
 
     def _toggle_group(self, row: HeaderRow) -> None:
