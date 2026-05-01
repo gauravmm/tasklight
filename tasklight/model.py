@@ -1,5 +1,6 @@
 """Agent state model: in-memory records + QAbstractListModel."""
 
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -7,12 +8,20 @@ from enum import Enum, auto
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSignal
 
+_log = logging.getLogger(__name__)
+
 
 class AgentState(Enum):
     THINKING = auto()
     TOOL = auto()
     APPROVAL = auto()
     DONE = auto()
+
+
+@dataclass
+class TokenSample:
+    t: float       # time.monotonic() at the hook
+    tokens: int    # cumulative context_tokens reported
 
 
 @dataclass
@@ -27,6 +36,7 @@ class AgentRecord:
     state_entered_at: float = field(default_factory=time.monotonic)
     started_at: float = field(default_factory=time.monotonic)
     dismissed: bool = False
+    token_history: list[TokenSample] = field(default_factory=list)
 
 
 # Maps incoming event names to the next AgentState (None = no change / special).
@@ -123,9 +133,43 @@ class AgentStateModel(QAbstractListModel):
         else:
             record.tool_name = None
 
+        # Append token sample if context_tokens present in payload.
+        raw_ct = payload.get("context_tokens")
+        if raw_ct is not None:
+            try:
+                ct = int(raw_ct)
+                if ct >= 0:
+                    self._append_token_sample(record, ct)
+            except (ValueError, TypeError):
+                _log.warning("context_tokens parse error (dropped): %r", raw_ct)
+
         row = self._records.index(record)
         idx = self.index(row)
         self.dataChanged.emit(idx, idx)
+
+    def _append_token_sample(
+        self,
+        record: AgentRecord,
+        context_tokens: int,
+        window_s: int = 300,
+        reset_fraction: float = 0.20,
+    ) -> None:
+        """Append a TokenSample and apply reset/trim rules (§3.2–§3.4)."""
+        now = time.monotonic()
+        new_sample = TokenSample(now, context_tokens)
+
+        # Reset rule §3.3: if tokens dropped > reset_fraction, keep only new.
+        if record.token_history:
+            prev = record.token_history[-1]
+            if new_sample.tokens < prev.tokens * (1 - reset_fraction):
+                record.token_history.clear()
+
+        record.token_history.append(new_sample)
+
+        # Window trim §3.4: drop samples older than window_s, but keep ≥2.
+        cutoff = now - window_s
+        while len(record.token_history) > 2 and record.token_history[0].t < cutoff:
+            record.token_history.pop(0)
 
     def reset(self) -> None:
         if not self._records:
