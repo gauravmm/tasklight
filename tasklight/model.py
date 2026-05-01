@@ -112,8 +112,10 @@ class AgentStateModel(QAbstractListModel):
             self._records.append(record)
             self.endInsertRows()
         else:
+            prev_state = record.state
             record.state = next_state
-            record.state_entered_at = time.monotonic()
+            if prev_state == AgentState.DONE:
+                record.state_entered_at = time.monotonic()
             record.dismissed = False
 
         if next_state == AgentState.TOOL:
