@@ -350,15 +350,21 @@ Defined per row, in the row's local coordinate space:
 
 | Quantity | Value |
 |---|---|
-| `chart_right` | row right edge, minus `metrics.pad`, minus `metrics.elapsed_width`, minus `metrics.text_gap` |
-| `chart_left`  | `chart_right - chart_width` |
-| `chart_width` | `theme.token_rate.width_em * metrics.em` (default `width_em = 24`); clamped to fit between `metrics.label_x` and `chart_right` |
+| `chart_left` | `metrics.label_x` (start of the label/text band) |
+| `chart_right` | `widget.width() - metrics.pad` (row's inner right edge) |
+| `chart_width` | `chart_right - chart_left` |
 | `chart_top` | `layout_row.top + 1` |
 | `chart_bottom` | `layout_row.top + layout_row.height - 1` |
 
-The chart sits in a band that overlaps the label and (optionally) the
-elapsed column; text is drawn **after** the chart so it remains legible.
-The fill is anchored to `chart_bottom` and grows upward.
+The chart spans the full text band — from the start of the label to the
+row's right edge, passing under the elapsed-time column. Text is drawn
+**after** the chart so it remains legible; the low default `fill_alpha`
+keeps both readable. The fill is anchored to `chart_bottom` and grows
+upward.
+
+`theme.token_rate.width_em` is retained in config for forward
+compatibility but is not consulted by the renderer; the chart width is
+fixed by row geometry.
 
 The x-axis maps time to pixels:
 

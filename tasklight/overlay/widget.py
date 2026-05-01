@@ -354,18 +354,12 @@ class OverlayWidget(QWidget):
     ) -> None:
         """Compute chart geometry and delegate to paint_sparkline (§5.1)."""
         cfg = self._cfg.theme.token_rate
-        em = metrics.em
-        chart_width = min(
-            int(cfg.width_em * em),
-            self.width() - metrics.label_x,
-        )
-        chart_right = (
-            self.width()
-            - metrics.pad
-            - metrics.elapsed_width
-            - metrics.text_gap
-        )
-        chart_left = max(metrics.label_x, chart_right - chart_width)
+        # Chart spans the full text band: from the start of the label
+        # (where dirname/tool text begins) to the row's right edge,
+        # passing under the elapsed-time column. Text is painted over
+        # the chart so it stays legible.
+        chart_left = metrics.label_x
+        chart_right = self.width() - metrics.pad
         chart_top = layout_row.top + 1
         chart_bottom = layout_row.top + layout_row.height - 1
 
