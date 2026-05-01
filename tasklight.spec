@@ -1,6 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import subprocess
 import PyQt6
+
+def _build_version():
+    try:
+        short = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        dirty = subprocess.call(
+            ["git", "diff", "--quiet"], stderr=subprocess.DEVNULL
+        ) != 0
+        return f"{short}{'-dirty' if dirty else ''}"
+    except Exception:
+        return ""
+
+_version_file = os.path.join(os.path.dirname(os.path.abspath(SPEC)), "_version.txt")
+with open(_version_file, "w") as _f:
+    _f.write(_build_version())
 
 # PyInstaller's PyQt6 hook does not reliably collect platform plugins.
 # Collect them explicitly so qwindows.dll / libqxcb.so are bundled.
@@ -15,7 +32,7 @@ a = Analysis(
     ['tasklight/__main__.py'],
     pathex=[],
     binaries=[],
-    datas=_plugin_datas + [('spec/tasklight.ico', '.')],
+    datas=_plugin_datas + [('spec/tasklight.ico', '.'), (_version_file, '.')],
     hiddenimports=['PyQt6.sip', 'pkgutil'],
     hookspath=[],
     hooksconfig={},

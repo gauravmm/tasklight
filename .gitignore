@@ -218,3 +218,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 tasklight.yaml
+_version.txt

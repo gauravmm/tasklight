@@ -9,7 +9,10 @@ from PyQt6.QtWidgets import QApplication, QMessageBox, QWidget
 
 def _git_version() -> str:
     if hasattr(sys, "_MEIPASS"):
-        return ""
+        try:
+            return (Path(sys._MEIPASS) / "_version.txt").read_text().strip()
+        except Exception:
+            return ""
     try:
         root = Path(__file__).parent.parent
         short = subprocess.check_output(
