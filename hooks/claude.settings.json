@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=start\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=start\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); TOOL=$(printf '%s' \"$INPUT\" | jq -r '.tool_name // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$TOOL\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$TOOL\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=stop\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=stop\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=exit\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=exit\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=approval_required\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=approval_required\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
+            "command": "INPUT=$(cat); TP=$(printf '%s' \"$INPUT\" | jq -r '.transcript_path // empty'); TF=$(mktemp); [ -n \"$TP\" ] && [ -r \"$TP\" ] && tail -n 6 \"$TP\" > \"$TF\"; WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -sf -m 1 -H \"X-Tasklight-Hostname: $(hostname)\" -F \"hook=$INPUT;type=application/json\" -F \"transcript_tail=@$TF;type=text/plain\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook/claude-code\" >/dev/null 2>&1 || true; rm -f \"$TF\""
           }
         ]
       }
