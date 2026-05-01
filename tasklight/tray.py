@@ -8,6 +8,7 @@ from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from tasklight.dialogs import show_about
+from tasklight.model import AgentStateModel
 
 _ICO_PATH = (
     Path(sys._MEIPASS) / "tasklight.ico"
@@ -16,7 +17,7 @@ _ICO_PATH = (
 )
 
 
-def build_context_menu(parent: QWidget) -> QMenu:
+def build_context_menu(parent: QWidget, model: AgentStateModel) -> QMenu:
     menu = QMenu(parent)
 
     about_action = QAction("About", menu)
@@ -24,6 +25,10 @@ def build_context_menu(parent: QWidget) -> QMenu:
     menu.addAction(about_action)
 
     menu.addSeparator()
+
+    reset_action = QAction("Reset state", menu)
+    reset_action.triggered.connect(model.reset)
+    menu.addAction(reset_action)
 
     quit_action = QAction("Quit", menu)
     quit_action.triggered.connect(lambda: QApplication.instance().exit(0))

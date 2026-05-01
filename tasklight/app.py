@@ -43,7 +43,7 @@ def run(config_path: Path) -> int:
     server.start()
 
     overlay = OverlayWidget(model, cfg)
-    context_menu = build_context_menu(overlay)
+    context_menu = build_context_menu(overlay, model)
     overlay.set_context_menu(context_menu)
 
     def _persist_dock_position(position: str) -> None:

@@ -125,6 +125,13 @@ class AgentStateModel(QAbstractListModel):
         idx = self.index(row)
         self.dataChanged.emit(idx, idx)
 
+    def reset(self) -> None:
+        if not self._records:
+            return
+        self.beginRemoveRows(QModelIndex(), 0, len(self._records) - 1)
+        self._records.clear()
+        self.endRemoveRows()
+
     def dismiss(self, session_id: str) -> None:
         record = self._find(session_id)
         if record is not None:
