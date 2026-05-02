@@ -54,9 +54,7 @@ class OverlayWidget(QWidget):
     def __init__(self, model: AgentStateModel, cfg: AppConfig) -> None:
         super().__init__(
             None,
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool,
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool,
         )
         self._model = model
         self._cfg = cfg
@@ -146,9 +144,7 @@ class OverlayWidget(QWidget):
                 )
                 if status.state == AgentState.APPROVAL:
                     painter.fillRect(row_rect, self._colors.approval_bg)
-                elif (
-                    status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0
-                ):
+                elif status.state == AgentState.DONE and self._colors.done_bg.alpha() > 0:
                     painter.fillRect(row_rect, self._colors.done_bg)
 
             # Paint sparkline before text for AgentRow (non-APPROVAL) rows (§5.3).
@@ -162,9 +158,7 @@ class OverlayWidget(QWidget):
                 if len(history) >= 2:
                     resets = self._token_resets_for(row.record_session_id)
                     cwm = self._context_window_max_for(row.record_session_id)
-                    self._paint_row_sparkline(
-                        painter, layout_row, metrics, history, resets, cwm, now
-                    )
+                    self._paint_row_sparkline(painter, layout_row, metrics, history, resets, cwm, now)
 
             baseline = layout_row.top + painter.fontMetrics().ascent()
             if isinstance(row, HeaderRow):
@@ -188,9 +182,7 @@ class OverlayWidget(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
 
-        self._pressed_row = hit_test(
-            self._layout(QFontMetrics(self.font())), event.position()
-        )
+        self._pressed_row = hit_test(self._layout(QFontMetrics(self.font())), event.position())
         self._press_global_pos = event.globalPosition()
         self._drag_offset = event.globalPosition() - QPointF(self.x(), self.y())
         self._drag_screen = self._screen_for_point(event.globalPosition().toPoint())
@@ -208,17 +200,12 @@ class OverlayWidget(QWidget):
         if (
             self._press_global_pos is None
             or self._drag_offset is None
-            or (
-                isinstance(self._pressed_row, AgentRow)
-                and self._pressed_row.record_session_id
-            )
+            or (isinstance(self._pressed_row, AgentRow) and self._pressed_row.record_session_id)
         ):
             return
 
         if not self._dragging:
-            if (
-                event.globalPosition() - self._press_global_pos
-            ).manhattanLength() < QApplication.startDragDistance():
+            if (event.globalPosition() - self._press_global_pos).manhattanLength() < QApplication.startDragDistance():
                 return
             self._dragging = True
 
@@ -261,19 +248,11 @@ class OverlayWidget(QWidget):
             self._toggle_group(pressed_row)
             return
 
-        if (
-            isinstance(pressed_row, AgentRow)
-            and pressed_row.record_session_id
-            and pressed_row.state == AgentState.DONE
-        ):
+        if isinstance(pressed_row, AgentRow) and pressed_row.record_session_id and pressed_row.state == AgentState.DONE:
             self._model.dismiss(pressed_row.record_session_id)
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        if (
-            not self._cfg.theme.behavior.system_cursor
-            and event is not None
-            and hasattr(event, "position")
-        ):
+        if not self._cfg.theme.behavior.system_cursor and event is not None and hasattr(event, "position"):
             self._cursor_pos = event.position()
         self.update()
 
@@ -326,15 +305,11 @@ class OverlayWidget(QWidget):
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
         # Spinners need the timer if animate_spinners is on.
         spinner_active = self._cfg.theme.behavior.animate_spinners and any(
-            (
-                isinstance(layout_row.row, AgentRow)
-                and layout_row.row.state in (AgentState.THINKING, AgentState.TOOL)
-            )
+            (isinstance(layout_row.row, AgentRow) and layout_row.row.state in (AgentState.THINKING, AgentState.TOOL))
             or (
                 isinstance(layout_row.row, HeaderRow)
                 and layout_row.row.summary is not None
-                and layout_row.row.summary.state
-                in (AgentState.THINKING, AgentState.TOOL)
+                and layout_row.row.summary.state in (AgentState.THINKING, AgentState.TOOL)
             )
             for layout_row in layout.rows
         )
@@ -560,9 +535,7 @@ class OverlayWidget(QWidget):
             "T": abs(point.y() - geometry.top()),
             "B": abs(geometry.bottom() - point.y()),
         }
-        nearest_edge, nearest_distance = min(
-            distances.items(), key=lambda item: item[1]
-        )
+        nearest_edge, nearest_distance = min(distances.items(), key=lambda item: item[1])
         if nearest_distance > self._SNAP_EDGE_THRESHOLD_PX:
             return None
 

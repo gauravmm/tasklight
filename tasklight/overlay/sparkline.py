@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 from PyQt6.QtCore import QPointF, QRect, QRectF
 from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPolygonF
@@ -250,7 +250,7 @@ def paint_sparkline(
 
     for x in range(chart_left, chart_right + 1):
         u = (chart_right - x) / chart_width
-        t_x = display_now - window_s * (u ** curve)
+        t_x = display_now - window_s * (u**curve)
 
         if is_in_reset_edge(resets, t_x):
             y_read.append(float(bands_bottom))
@@ -353,11 +353,10 @@ def paint_sparkline(
             stroke_color = QColor(bands.input_color)
             stroke_color.setAlphaF(bands.stroke_alpha)
             from PyQt6.QtGui import QPen
+
             painter.setPen(QPen(stroke_color, 1.0))
             painter.setBrush(QColor(0, 0, 0, 0))
-            painter.drawPolyline(
-                QPolygonF([QPointF(chart_left + i, y_input[i]) for i in range(n_cols)])
-            )
+            painter.drawPolyline(QPolygonF([QPointF(chart_left + i, y_input[i]) for i in range(n_cols)]))
             painter.setPen(QColor(0, 0, 0, 0))
 
     # Context-window indicator: thin solid line at the bottom of the
@@ -373,9 +372,7 @@ def paint_sparkline(
             line_color.setAlphaF(line_cfg.alpha)
             line_w = chart_width * fill_fraction
             line_y = chart_bottom - line_h + 1
-            line_rect = QRectF(
-                float(chart_left), float(line_y), float(line_w), float(line_h)
-            )
+            line_rect = QRectF(float(chart_left), float(line_y), float(line_w), float(line_h))
             if fade_frac > 0.0:
                 gradient = QLinearGradient(
                     QPointF(float(chart_left), 0.0),

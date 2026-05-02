@@ -66,13 +66,12 @@ def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
     strings or charset conversion.
     """
     # Extract boundary from Content-Type header.
-    m = re.search(r'boundary=([^\s;]+)', content_type)
+    m = re.search(r"boundary=([^\s;]+)", content_type)
     if not m:
         return {}
-    boundary = m.group(1).strip('"\'').encode()
+    boundary = m.group(1).strip("\"'").encode()
 
     delimiter = b"--" + boundary
-    end_marker = b"--" + boundary + b"--"
 
     fields: dict[str, bytes] = {}
     # Split on delimiter lines.

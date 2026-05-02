@@ -20,11 +20,7 @@ def _summary_for_group(records: list[AgentRecord], now: float) -> GroupSummary:
         if matches:
             return GroupSummary(matches[0].source, state, label, elapsed)
 
-    active = [
-        record
-        for record in records
-        if record.state in (AgentState.THINKING, AgentState.TOOL)
-    ]
+    active = [record for record in records if record.state in (AgentState.THINKING, AgentState.TOOL)]
     source = active[0].source if active else ""
     return GroupSummary(source, AgentState.THINKING, "Working…", elapsed)
 
@@ -56,9 +52,7 @@ def build_rows(
         rows.append(HeaderRow(dirname, hostname=display_hostname, group_key=group_key))
         for record in group:
             label = (
-                f"Tool: {record.tool_name or '?'}"
-                if record.state == AgentState.TOOL
-                else STATE_LABELS[record.state]
+                f"Tool: {record.tool_name or '?'}" if record.state == AgentState.TOOL else STATE_LABELS[record.state]
             )
             rows.append(
                 AgentRow(

@@ -72,9 +72,7 @@ def create_tray(parent: QWidget, context_menu: QMenu) -> QSystemTrayIcon | None:
     tray.setContextMenu(context_menu)
     tray.activated.connect(
         lambda reason: (
-            context_menu.popup(tray.geometry().center())
-            if reason == QSystemTrayIcon.ActivationReason.Trigger
-            else None
+            context_menu.popup(tray.geometry().center()) if reason == QSystemTrayIcon.ActivationReason.Trigger else None
         )
     )
     tray.show()

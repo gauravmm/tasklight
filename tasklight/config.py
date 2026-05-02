@@ -25,6 +25,7 @@ class DockConfig:
 @dataclass
 class WindowConfig:
     """The overlay panel itself."""
+
     background: str = "#1e1e1e"
     background_alpha: float = 0.85
     corner_radius: int = 10
@@ -33,10 +34,11 @@ class WindowConfig:
 @dataclass
 class TextConfig:
     """Text colors and font."""
+
     foreground: str = "#e8e8e8"
     dirname_fg: str = "#888888"
     hostname_fg: str = "#5599cc"
-    elapsed_fg: str = ""              # empty = use dirname_fg
+    elapsed_fg: str = ""  # empty = use dirname_fg
     font_family: str = "monospace"
     font_size: int = 13
 
@@ -44,6 +46,7 @@ class TextConfig:
 @dataclass
 class StatesConfig:
     """Per-AgentState colors."""
+
     done_fg: str = "#44cc77"
     done_bg: str = ""
     approval_fg: str = "#ff4444"
@@ -53,6 +56,7 @@ class StatesConfig:
 @dataclass
 class BehaviorConfig:
     """UX toggles."""
+
     system_cursor: bool = True
     animate_spinners: bool = True
 
@@ -65,25 +69,28 @@ class BehaviorConfig:
 @dataclass
 class SamplingConfig:
     """How token samples are gathered, aged out, and segmented."""
-    window_s: int = 300              # sliding window length
-    reset_fraction: float = 0.20     # total drop ratio that triggers reset
-    smoothing_tau_s: float = 0.0     # 0 = auto = window_s / 30
+
+    window_s: int = 300  # sliding window length
+    reset_fraction: float = 0.20  # total drop ratio that triggers reset
+    smoothing_tau_s: float = 0.0  # 0 = auto = window_s / 30
 
 
 @dataclass
 class BandsConfig:
     """The stacked rate sparkline (bottom-up: cache_read, cache_creation, input)."""
+
     cache_read_color: str = "#5599cc"
     cache_creation_color: str = "#ff9933"
     input_color: str = "#cccccc"
     fill_alpha: float = 0.35
     stroke_alpha: float = 0.0
-    scale_headroom: float = 2.5      # y-axis headroom multiplier
+    scale_headroom: float = 2.5  # y-axis headroom multiplier
 
 
 @dataclass
 class TimeAxisConfig:
     """Pixel-to-time mapping for the rate chart."""
+
     # 1.0 = linear; >1 stretches recent activity near the right edge
     # and compresses older samples toward the left.
     time_curve_exponent: float = 2.0
@@ -98,21 +105,24 @@ class TimeAxisConfig:
 @dataclass
 class ContextLineConfig:
     """The thin horizontal bar at the bottom showing context fill level."""
+
     height_px: int = 1
     alpha: float = 0.65
-    color: str = ""                  # empty = use threshold-lerp color
+    color: str = ""  # empty = use threshold-lerp color
 
 
 @dataclass
 class ContextMarkerConfig:
     """The triangular marker that points down at the bar's head."""
-    size_px: int = 4                 # 0 disables; height and half-width
+
+    size_px: int = 4  # 0 disables; height and half-width
 
 
 @dataclass
 class ContextTintConfig:
     """Ambient background tint that shifts color as context fills."""
-    alpha: float = 0.10
+
+    alpha: float = 0.01
     color_safe: str = "#ffffff"
     color_warn: str = "#ffaa00"
     warn_start_fraction: float = 0.60
@@ -122,7 +132,8 @@ class ContextTintConfig:
 @dataclass
 class ContextConfig:
     """Family of indicators that show absolute context-window fill."""
-    window_max: int = 200000         # 0 disables the whole family
+
+    window_max: int = 200000  # 0 disables the whole family
     line: ContextLineConfig = field(default_factory=ContextLineConfig)
     marker: ContextMarkerConfig = field(default_factory=ContextMarkerConfig)
     tint: ContextTintConfig = field(default_factory=ContextTintConfig)
@@ -155,9 +166,7 @@ class TimeoutsConfig:
 @dataclass
 class AppConfig:
     port: int = 57017
-    allowed_subnets: list[str] = field(
-        default_factory=lambda: ["127.0.0.0/8", "172.16.0.0/12"]
-    )
+    allowed_subnets: list[str] = field(default_factory=lambda: ["127.0.0.0/8", "172.16.0.0/12"])
     dock: DockConfig = field(default_factory=DockConfig)
     theme: ThemeConfig = field(default_factory=ThemeConfig)
     timeouts: TimeoutsConfig = field(default_factory=TimeoutsConfig)

@@ -525,7 +525,7 @@ class ContextMarkerConfig:
 
 @dataclass
 class ContextTintConfig:
-    alpha: float = 0.10
+    alpha: float = 0.01
     color_safe: str = "#ffffff"
     color_warn: str = "#ffaa00"
     warn_start_fraction: float = 0.60

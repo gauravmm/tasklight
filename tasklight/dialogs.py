@@ -41,9 +41,7 @@ def _git_version() -> str:
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
-        short = subprocess.check_output(
-            [git, "rev-parse", "--short", "HEAD"], text=True, **kwargs
-        ).strip()
+        short = subprocess.check_output([git, "rev-parse", "--short", "HEAD"], text=True, **kwargs).strip()
         dirty = subprocess.call([git, "diff", "--quiet"], **kwargs) != 0
         return f"{short}{'-dirty' if dirty else ''}"
     except Exception:
@@ -56,6 +54,6 @@ def show_about(parent: QWidget) -> None:
     QMessageBox.about(
         parent,
         "About Tasklight",
-        f'<b>Tasklight</b><br>Desktop widget to track your AI agents.{version_line}'
+        f"<b>Tasklight</b><br>Desktop widget to track your AI agents.{version_line}"
         f'<br><a href="https://github.com/gauravmm/tasklight/">github.com/gauravmm/tasklight</a>',
     )

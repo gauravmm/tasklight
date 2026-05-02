@@ -22,11 +22,7 @@ def fmt_elapsed(seconds: float) -> str:
     total_seconds = int(seconds)
     if total_seconds < 3600:
         return f"{total_seconds // 60:02d}:{total_seconds % 60:02d}"
-    return (
-        f"{total_seconds // 3600:d}:"
-        f"{(total_seconds % 3600) // 60:02d}:"
-        f"{total_seconds % 60:02d}"
-    )
+    return f"{total_seconds // 3600:d}:{(total_seconds % 3600) // 60:02d}:{total_seconds % 60:02d}"
 
 
 def hex_color(color_str: str, alpha: float = 1.0) -> QColor:
@@ -53,11 +49,7 @@ def glyph_for_state(
     theme: ThemeConfig,
 ) -> tuple[str, QColor]:
     if state in (AgentState.THINKING, AgentState.TOOL):
-        glyph = (
-            spinner_frames(source)[frame % len(spinner_frames(source))]
-            if animate
-            else static_spinner_glyph(source)
-        )
+        glyph = spinner_frames(source)[frame % len(spinner_frames(source))] if animate else static_spinner_glyph(source)
         color = hex_color("#d97757") if source == "claude-code" else hex_color("#88ddff")
         return glyph, color
     if state == AgentState.APPROVAL:

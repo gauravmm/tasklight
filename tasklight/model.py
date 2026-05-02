@@ -17,18 +17,14 @@ class AgentState(Enum):
 
 @dataclass
 class TokenSample:
-    t: float                       # time.monotonic() at the hook
-    input_tokens: int = 0          # cumulative non-cache input tokens
-    cache_creation_tokens: int = 0 # cumulative tokens written to cache
-    cache_read_tokens: int = 0     # cumulative tokens read from cache
+    t: float  # time.monotonic() at the hook
+    input_tokens: int = 0  # cumulative non-cache input tokens
+    cache_creation_tokens: int = 0  # cumulative tokens written to cache
+    cache_read_tokens: int = 0  # cumulative tokens read from cache
 
     @property
     def total(self) -> int:
-        return (
-            self.input_tokens
-            + self.cache_creation_tokens
-            + self.cache_read_tokens
-        )
+        return self.input_tokens + self.cache_creation_tokens + self.cache_read_tokens
 
 
 @dataclass
@@ -55,14 +51,14 @@ class AgentRecord:
 
 # Maps incoming event names to the next AgentState (None = no change / special).
 _EVENT_STATE: dict[str, AgentState | None] = {
-    "start":            AgentState.THINKING,
-    "thinking":         AgentState.THINKING,
-    "tool_use":         AgentState.TOOL,
-    "tool_result":      AgentState.THINKING,
+    "start": AgentState.THINKING,
+    "thinking": AgentState.THINKING,
+    "tool_use": AgentState.TOOL,
+    "tool_result": AgentState.THINKING,
     "approval_required": AgentState.APPROVAL,
     "approval_granted": AgentState.THINKING,
-    "stop":             AgentState.DONE,
-    "exit":             None,
+    "stop": AgentState.DONE,
+    "exit": None,
 }
 
 
@@ -199,9 +195,7 @@ class AgentStateModel(QAbstractListModel):
         while len(record.token_history) > 2 and record.token_history[0].t < cutoff:
             record.token_history.pop(0)
         # Trim reset edges that have fully scrolled off the window.
-        record.token_resets = [
-            (a, b) for (a, b) in record.token_resets if b >= cutoff
-        ]
+        record.token_resets = [(a, b) for (a, b) in record.token_resets if b >= cutoff]
 
     def reset(self) -> None:
         if not self._records:

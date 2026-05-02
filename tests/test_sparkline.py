@@ -1,13 +1,11 @@
 """Unit tests for tasklight.overlay.sparkline and related model logic."""
 
 import json
-import math
 
 import pytest
 
 from tasklight.model import AgentRecord, AgentState, TokenSample
 from tasklight.overlay.sparkline import (
-    Segment,
     compute_mean_rate,
     is_in_reset_edge,
     iter_segments,
@@ -19,10 +17,10 @@ from tasklight.server import (
     _parse_multipart,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_history(*pairs: tuple[float, int]) -> list[TokenSample]:
     """Build a TokenSample list from (t, tokens) pairs."""
@@ -31,6 +29,7 @@ def make_history(*pairs: tuple[float, int]) -> list[TokenSample]:
 
 def make_record(session_id: str = "test") -> AgentRecord:
     import time
+
     now = time.monotonic()
     return AgentRecord(
         session_id=session_id,
@@ -46,6 +45,7 @@ def make_record(session_id: str = "test") -> AgentRecord:
 # ---------------------------------------------------------------------------
 # iter_segments
 # ---------------------------------------------------------------------------
+
 
 class TestIterSegments:
     def test_empty(self):
@@ -82,6 +82,7 @@ class TestIterSegments:
 # ---------------------------------------------------------------------------
 # compute_mean_rate
 # ---------------------------------------------------------------------------
+
 
 class TestComputeMeanRate:
     def test_empty_returns_zero(self):
@@ -122,6 +123,7 @@ class TestComputeMeanRate:
 # ---------------------------------------------------------------------------
 # smoothed_rate
 # ---------------------------------------------------------------------------
+
 
 class TestSmoothedRate:
     def test_empty_returns_zero(self):
@@ -169,6 +171,7 @@ class TestSmoothedRate:
 # is_in_reset_edge
 # ---------------------------------------------------------------------------
 
+
 class TestIsInResetEdge:
     def test_empty_resets(self):
         assert not is_in_reset_edge([], 5.0)
@@ -195,6 +198,7 @@ class TestIsInResetEdge:
 # Reset rule (§3.3) — via AgentStateModel._append_token_sample
 # ---------------------------------------------------------------------------
 
+
 class TestResetRule:
     def _append(self, record, tokens, window_s=300, reset_fraction=0.20):
         """Call the private helper directly for testing.
@@ -204,6 +208,7 @@ class TestResetRule:
         equivalent.
         """
         from tasklight.model import AgentStateModel
+
         model = AgentStateModel.__new__(AgentStateModel)
         model._append_token_sample(
             record,
@@ -260,16 +265,17 @@ class TestResetRule:
 # Window trim (§3.4)
 # ---------------------------------------------------------------------------
 
+
 class TestWindowTrim:
     def _append(self, record, tokens, window_s=300):
         from tasklight.model import AgentStateModel
+
         model = AgentStateModel.__new__(AgentStateModel)
-        model._append_token_sample(
-            record, input_tokens=tokens, window_s=window_s
-        )
+        model._append_token_sample(record, input_tokens=tokens, window_s=window_s)
 
     def test_old_samples_trimmed(self):
         import time
+
         r = make_record()
         # Manually inject old samples.
         old_t = time.monotonic() - 400  # older than window_s=300
@@ -287,6 +293,7 @@ class TestWindowTrim:
 
     def test_minimum_two_kept_even_when_old(self):
         import time
+
         r = make_record()
         old_t = time.monotonic() - 1000
         r.token_history = [
@@ -302,6 +309,7 @@ class TestWindowTrim:
 # JSONL reverse-scan parser (_extract_usage_from_transcript_tail)
 # ---------------------------------------------------------------------------
 
+
 class TestExtractUsage:
     def _make_line(self, obj: dict) -> bytes:
         return json.dumps(obj).encode() + b"\n"
@@ -310,15 +318,17 @@ class TestExtractUsage:
         assert _extract_usage_from_transcript_tail(b"") is None
 
     def test_simple_message_usage(self):
-        line = self._make_line({
-            "message": {
-                "usage": {
-                    "input_tokens": 100,
-                    "cache_creation_input_tokens": 50,
-                    "cache_read_input_tokens": 25,
+        line = self._make_line(
+            {
+                "message": {
+                    "usage": {
+                        "input_tokens": 100,
+                        "cache_creation_input_tokens": 50,
+                        "cache_read_input_tokens": 25,
+                    }
                 }
             }
-        })
+        )
         result = _extract_usage_from_transcript_tail(line)
         assert result == {
             "input_tokens": 100,
@@ -357,23 +367,27 @@ class TestExtractUsage:
         assert result["input_tokens"] == 42
 
     def test_mixed_lines_no_usage(self):
-        lines = b"".join([
-            self._make_line({"type": "tool_use", "name": "bash"}),
-            self._make_line({"type": "tool_result"}),
-        ])
+        lines = b"".join(
+            [
+                self._make_line({"type": "tool_use", "name": "bash"}),
+                self._make_line({"type": "tool_result"}),
+            ]
+        )
         result = _extract_usage_from_transcript_tail(lines)
         assert result is None
 
     def test_all_sub_fields_present(self):
-        line = self._make_line({
-            "message": {
-                "usage": {
-                    "input_tokens": 10000,
-                    "cache_creation_input_tokens": 5000,
-                    "cache_read_input_tokens": 2000,
+        line = self._make_line(
+            {
+                "message": {
+                    "usage": {
+                        "input_tokens": 10000,
+                        "cache_creation_input_tokens": 5000,
+                        "cache_read_input_tokens": 2000,
+                    }
                 }
             }
-        })
+        )
         result = _extract_usage_from_transcript_tail(line)
         assert result == {
             "input_tokens": 10000,
@@ -382,23 +396,27 @@ class TestExtractUsage:
         }
 
     def test_includes_context_window_when_model_known(self):
-        line = self._make_line({
-            "type": "assistant",
-            "message": {
-                "model": "claude-opus-4-7",
-                "usage": {"input_tokens": 100, "cache_read_input_tokens": 50},
-            },
-        })
+        line = self._make_line(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-7",
+                    "usage": {"input_tokens": 100, "cache_read_input_tokens": 50},
+                },
+            }
+        )
         result = _extract_usage_from_transcript_tail(line)
         assert result["context_window_max"] == 200_000
 
     def test_omits_context_window_when_model_unknown(self):
-        line = self._make_line({
-            "message": {
-                "model": "gpt-4-turbo",
-                "usage": {"input_tokens": 100},
-            },
-        })
+        line = self._make_line(
+            {
+                "message": {
+                    "model": "gpt-4-turbo",
+                    "usage": {"input_tokens": 100},
+                },
+            }
+        )
         result = _extract_usage_from_transcript_tail(line)
         assert "context_window_max" not in result
 
@@ -446,18 +464,20 @@ class TestExtractUsage:
         assert fields["transcript_tail"] == b"transcript-data"
 
     def test_extra_fields_ignored(self):
-        line = self._make_line({
-            "type": "assistant",
-            "message": {
-                "id": "msg_xxx",
-                "usage": {
-                    "input_tokens": 300,
-                    "output_tokens": 150,  # not counted
-                    "cache_read_input_tokens": 100,
+        line = self._make_line(
+            {
+                "type": "assistant",
+                "message": {
+                    "id": "msg_xxx",
+                    "usage": {
+                        "input_tokens": 300,
+                        "output_tokens": 150,  # not counted
+                        "cache_read_input_tokens": 100,
+                    },
+                    "content": [],
                 },
-                "content": [],
-            },
-        })
+            }
+        )
         result = _extract_usage_from_transcript_tail(line)
         assert result == {
             "input_tokens": 300,
