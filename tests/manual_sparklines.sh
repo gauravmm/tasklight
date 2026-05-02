@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Manually exercise the /hook/claude-code sparkline path.
 #
-# Spawns a synthetic Claude Code session: writes a fake transcript JSONL
-# and POSTs hook events to a running Tasklight on localhost:57017 every
-# few seconds, ramping context_tokens upward. Hit ^C to stop; the
-# script sends a SessionEnd before exiting.
+# Spawns three synthetic Claude Code sessions in parallel:
+#   Session 1 (main)   — steady growth, auto-resets to ~40k at 200k tokens.
+#   Session 2          — same project as session 1, slower growth.
+#   Session 3          — different project; periodically asks for tool permission.
 #
-# Optional: pass `reset` as the first arg to simulate a /clear-style
-# context drop after ~30 s.
+# Writes fake transcript JSONL files and POSTs hook events to a running
+# Tasklight on localhost:57017.  Hit ^C to stop; the script sends
+# SessionEnd for all sessions before exiting.
+#
+# Optional: pass `reset` as the first arg to also simulate a /clear-style
+# context drop in session 1 after ~30 s.
 #
 #   ./manual_sparklines.sh           # steady growth
 #   ./manual_sparklines.sh reset     # growth, drop at ~30 s, growth
@@ -43,28 +47,48 @@ ENDPOINT="http://${HOST}:${PORT}/hook/claude-code"
 INTERVAL_S=${INTERVAL_S:-3}
 DO_RESET=${1:-}
 
-SESSION_ID="manual-$(date +%s)-$$"
-WORKDIR=$(mktemp -d)
-TRANSCRIPT="$WORKDIR/transcript.jsonl"
-trap 'send_end; rm -rf "$WORKDIR"; exit 0' INT TERM
+TS=$(date +%s)
+SESSION_ID="manual-${TS}-$$"
+SESSION_ID_2="${SESSION_ID}-b"
+SESSION_ID_3="${SESSION_ID}-c"
 
-append_usage() {
-  local input=$1 cache_creation=$2 cache_read=$3
+WORKDIR=$(mktemp -d)
+WORKDIR_2=$(mktemp -d)
+WORKDIR_3=$(mktemp -d)
+
+TRANSCRIPT="$WORKDIR/transcript.jsonl"
+TRANSCRIPT_2="$WORKDIR_2/transcript.jsonl"
+TRANSCRIPT_3="$WORKDIR_3/transcript.jsonl"
+
+# Sessions 1 and 2 share the same project directory; session 3 is a
+# different project (the path need not exist on disk).
+CWD_12="$WORKDIR"
+CWD_3="/projects/other-project"
+
+# ------------------------------------------------------------------
+# Helpers (session-agnostic)
+# ------------------------------------------------------------------
+
+append_usage_to() {
+  local transcript=$1 input=$2 cache_creation=$3 cache_read=$4
   printf '{"type":"assistant","message":{"model":"claude-opus-4-7","usage":{"input_tokens":%d,"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d,"output_tokens":250}}}\n' \
-    "$input" "$cache_creation" "$cache_read" >> "$TRANSCRIPT"
+    "$input" "$cache_creation" "$cache_read" >> "$transcript"
 }
 
-post_event() {
-  local event=$1
+# Kept for the main session loop (backward-compatible wrapper).
+append_usage() { append_usage_to "$TRANSCRIPT" "$@"; }
+
+_post_event_raw() {
+  local session_id=$1 cwd=$2 event=$3 transcript=$4
   local hook_json
   hook_json=$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"%s","transcript_path":"%s"}' \
-    "$SESSION_ID" "$WORKDIR" "$event" "$TRANSCRIPT")
+    "$session_id" "$cwd" "$event" "$transcript")
 
   local hf tf
   hf=$(mktemp)
   tf=$(mktemp)
   printf '%s' "$hook_json" > "$hf"
-  tail -n 20 "$TRANSCRIPT" 2>/dev/null > "$tf" || true
+  tail -n 20 "$transcript" 2>/dev/null > "$tf" || true
 
   curl -sf -m 1 \
     -H "X-Tasklight-Hostname: $(hostname)" \
@@ -76,16 +100,105 @@ post_event() {
   rm -f "$hf" "$tf"
 }
 
-send_end() {
+# Shorthand for the main session.
+post_event() { _post_event_raw "$SESSION_ID" "$CWD_12" "$1" "$TRANSCRIPT"; }
+
+# ------------------------------------------------------------------
+# Cleanup: kill background loops, send SessionEnd for all sessions
+# ------------------------------------------------------------------
+
+BG_PIDS=()
+
+cleanup() {
+  for pid in "${BG_PIDS[@]+"${BG_PIDS[@]}"}"; do
+    kill "$pid" 2>/dev/null || true
+  done
   echo
-  echo "[manual_sparklines] sending SessionEnd for $SESSION_ID"
-  post_event SessionEnd
+  echo "[manual_sparklines] sending SessionEnd for all sessions"
+  _post_event_raw "$SESSION_ID"   "$CWD_12" SessionEnd "$TRANSCRIPT"
+  _post_event_raw "$SESSION_ID_2" "$CWD_12" SessionEnd "$TRANSCRIPT_2"
+  _post_event_raw "$SESSION_ID_3" "$CWD_3"  SessionEnd "$TRANSCRIPT_3"
+  rm -rf "$WORKDIR" "$WORKDIR_2" "$WORKDIR_3"
+  exit 0
 }
+trap cleanup INT TERM
+
+# ------------------------------------------------------------------
+# Session 2: same project as session 1, slower / steadier growth
+# ------------------------------------------------------------------
+(
+  sleep "$(echo "$INTERVAL_S" | awk '{printf "%.2f", $1/3}')"
+  local_i=0
+  local_input=1000 local_cache_read=8000 local_cache_creation=300
+
+  _post_event_raw "$SESSION_ID_2" "$CWD_12" SessionStart "$TRANSCRIPT_2"
+  while true; do
+    local_i=$((local_i + 1))
+    local_cache_read=$((local_cache_read + 2000 + RANDOM % 1500))
+    if [ $((local_i % 5)) -eq 0 ]; then
+      local_cache_creation=$((local_cache_creation + 4000 + RANDOM % 2000))
+    else
+      local_cache_creation=$((local_cache_creation + 100 + RANDOM % 200))
+    fi
+    local_input=$((local_input + 400 + RANDOM % 300))
+
+    append_usage_to "$TRANSCRIPT_2" "$local_input" "$local_cache_creation" "$local_cache_read"
+
+    if [ $((local_i % 2)) -eq 1 ]; then
+      _post_event_raw "$SESSION_ID_2" "$CWD_12" PreToolUse "$TRANSCRIPT_2"
+    else
+      _post_event_raw "$SESSION_ID_2" "$CWD_12" PostToolUse "$TRANSCRIPT_2"
+    fi
+    sleep "$INTERVAL_S"
+  done
+) &
+BG_PIDS+=($!)
+
+# ------------------------------------------------------------------
+# Session 3: different project; every 7 ticks ask for tool permission
+# ------------------------------------------------------------------
+(
+  sleep "$(echo "$INTERVAL_S" | awk '{printf "%.2f", $1*2/3}')"
+  local_i=0
+  local_input=3000 local_cache_read=20000 local_cache_creation=800
+
+  _post_event_raw "$SESSION_ID_3" "$CWD_3" SessionStart "$TRANSCRIPT_3"
+  while true; do
+    local_i=$((local_i + 1))
+    local_cache_read=$((local_cache_read + 3000 + RANDOM % 2000))
+    if [ $((local_i % 4)) -eq 0 ]; then
+      local_cache_creation=$((local_cache_creation + 5000 + RANDOM % 2000))
+    else
+      local_cache_creation=$((local_cache_creation + 150 + RANDOM % 250))
+    fi
+    local_input=$((local_input + 500 + RANDOM % 350))
+
+    append_usage_to "$TRANSCRIPT_3" "$local_input" "$local_cache_creation" "$local_cache_read"
+
+    if [ $((local_i % 7)) -eq 0 ]; then
+      # Simulate waiting for the user to approve a tool call.
+      _post_event_raw "$SESSION_ID_3" "$CWD_3" PermissionRequest "$TRANSCRIPT_3"
+      sleep $((INTERVAL_S * 2))
+      _post_event_raw "$SESSION_ID_3" "$CWD_3" PostToolUse "$TRANSCRIPT_3"
+    elif [ $((local_i % 2)) -eq 1 ]; then
+      _post_event_raw "$SESSION_ID_3" "$CWD_3" PreToolUse "$TRANSCRIPT_3"
+    else
+      _post_event_raw "$SESSION_ID_3" "$CWD_3" PostToolUse "$TRANSCRIPT_3"
+    fi
+    sleep "$INTERVAL_S"
+  done
+) &
+BG_PIDS+=($!)
+
+# ------------------------------------------------------------------
+# Main loop (session 1): growth with auto-reset at 200k
+# ------------------------------------------------------------------
 
 echo "[manual_sparklines] session_id=$SESSION_ID"
 echo "[manual_sparklines] endpoint=$ENDPOINT"
 echo "[manual_sparklines] reset_mode=${DO_RESET:-off}"
 echo "[manual_sparklines] interval=${INTERVAL_S}s — ^C to stop"
+echo "[manual_sparklines] parallel sessions: $SESSION_ID_2 (same project), $SESSION_ID_3 (other-project)"
 echo
 
 post_event SessionStart
@@ -100,8 +213,7 @@ while true; do
   i=$((i + 1))
 
   if [ "$DO_RESET" = "reset" ] && [ $reset_done -eq 0 ] && [ $i -ge 10 ]; then
-    # Simulate a /clear: tokens drop hard. The next sample after this
-    # should trigger the reset rule (>20% drop) and fire a reset edge.
+    # Simulate a /clear: tokens drop hard.
     input=1500
     cache_read=2000
     cache_creation=200
@@ -122,8 +234,22 @@ while true; do
   fi
 
   total=$((input + cache_read + cache_creation))
+
+  # Auto-reset to ~40k when the context window fills up (~200k).
+  # The server will detect the >20% token drop and mark a reset edge on
+  # the sparkline.
+  if [ $total -ge 200000 ]; then
+    prev_total=$total
+    input=2000
+    cache_read=30000
+    cache_creation=8000
+    total=$((input + cache_read + cache_creation))
+    echo "[$i] (AUTO-RESET) was $prev_total → now $total (in=$input cache_r=$cache_read cache_c=$cache_creation)"
+  else
+    echo "[$i] context_tokens=$total (in=$input cache_r=$cache_read cache_c=$cache_creation)"
+  fi
+
   append_usage "$input" "$cache_creation" "$cache_read"
-  echo "[$i] context_tokens=$total (in=$input cache_r=$cache_read cache_c=$cache_creation)"
 
   # Alternate PreToolUse / PostToolUse to look like a working session.
   if [ $((i % 2)) -eq 1 ]; then

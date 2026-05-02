@@ -1,8 +1,8 @@
-# <img src="spec/logo.png" height="32" /> Tasklight
+# <img src="media/logo.png" height="32" /> Tasklight
 
 Tasklight is a small always-on-top desktop overlay for watching local AI coding agents in real time. It listens for hooks over HTTP and shows per-agent state in a small floating window that can be docked.
 
-<img src="spec/showcase.gif" alt="Tasklight overlay showing agents in various states" />
+<img src="media/showcase.gif" alt="Tasklight overlay showing agents in various states" />
 
 Today the project targets Claude Code, Codex, and opencode hook payloads and renders them in a dockable PyQt6 desktop widget.
 

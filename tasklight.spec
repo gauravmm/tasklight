@@ -44,7 +44,7 @@ a = Analysis(
     ['tasklight/__main__.py'],
     pathex=[],
     binaries=[],
-    datas=_plugin_datas + [('spec/tasklight.ico', '.'), (_version_file, '.')],
+    datas=_plugin_datas + [('media/tasklight.ico', '.'), (_version_file, '.')],
     hiddenimports=['PyQt6.sip', 'pkgutil'],
     hookspath=[],
     hooksconfig={},
@@ -75,6 +75,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='spec/tasklight.ico',
+    icon='media/tasklight.ico',
     version='spec/version_info.txt',
 )
