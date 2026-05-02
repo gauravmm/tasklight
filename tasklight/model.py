@@ -16,6 +16,22 @@ class AgentState(Enum):
 
 
 @dataclass
+class TokenSample:
+    t: float                       # time.monotonic() at the hook
+    input_tokens: int = 0          # cumulative non-cache input tokens
+    cache_creation_tokens: int = 0 # cumulative tokens written to cache
+    cache_read_tokens: int = 0     # cumulative tokens read from cache
+
+    @property
+    def total(self) -> int:
+        return (
+            self.input_tokens
+            + self.cache_creation_tokens
+            + self.cache_read_tokens
+        )
+
+
+@dataclass
 class AgentRecord:
     session_id: str
     source: str
@@ -27,6 +43,14 @@ class AgentRecord:
     state_entered_at: float = field(default_factory=time.monotonic)
     started_at: float = field(default_factory=time.monotonic)
     dismissed: bool = False
+    token_history: list[TokenSample] = field(default_factory=list)
+    # (t_a, t_b) reset-edge intervals: time of the discarded prev sample
+    # to time of the new baseline. Pixels in this interval render at the
+    # chart floor so the discontinuity stays visible.
+    token_resets: list[tuple[float, float]] = field(default_factory=list)
+    # Context-window size (tokens) reported by the latest hook payload,
+    # or 0 if unknown — the painter falls back to the config default.
+    context_window_max: int = 0
 
 
 # Maps incoming event names to the next AgentState (None = no change / special).
@@ -123,9 +147,61 @@ class AgentStateModel(QAbstractListModel):
         else:
             record.tool_name = None
 
+        # Append token sample if usage breakdown is present in payload.
+        # The server validates and constructs the dict before emitting,
+        # so we trust the shape here.
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            cwm = usage.get("context_window_max")
+            if isinstance(cwm, int) and cwm > 0:
+                record.context_window_max = cwm
+            self._append_token_sample(
+                record,
+                input_tokens=int(usage.get("input_tokens", 0) or 0),
+                cache_creation_tokens=int(usage.get("cache_creation_tokens", 0) or 0),
+                cache_read_tokens=int(usage.get("cache_read_tokens", 0) or 0),
+            )
+
         row = self._records.index(record)
         idx = self.index(row)
         self.dataChanged.emit(idx, idx)
+
+    def _append_token_sample(
+        self,
+        record: AgentRecord,
+        input_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        window_s: int = 300,
+        reset_fraction: float = 0.20,
+    ) -> None:
+        """Append a TokenSample and apply reset/trim rules (§3.2–§3.4)."""
+        now = time.monotonic()
+        new_sample = TokenSample(
+            now,
+            input_tokens=input_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+        )
+
+        # Reset rule §3.3: if total tokens dropped > reset_fraction,
+        # record the reset edge [prev.t, new.t] and discard old history.
+        if record.token_history:
+            prev = record.token_history[-1]
+            if new_sample.total < prev.total * (1 - reset_fraction):
+                record.token_resets.append((prev.t, new_sample.t))
+                record.token_history.clear()
+
+        record.token_history.append(new_sample)
+
+        # Window trim §3.4: drop samples older than window_s, but keep ≥2.
+        cutoff = now - window_s
+        while len(record.token_history) > 2 and record.token_history[0].t < cutoff:
+            record.token_history.pop(0)
+        # Trim reset edges that have fully scrolled off the window.
+        record.token_resets = [
+            (a, b) for (a, b) in record.token_resets if b >= cutoff
+        ]
 
     def reset(self) -> None:
         if not self._records:

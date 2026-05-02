@@ -1,76 +1,26 @@
 {
+  "_comment": "Install hooks/tasklight-claude-hook.sh to ~/.claude/hooks/ before merging.",
   "hooks": {
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=start\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=start\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PreToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); TOOL=$(printf '%s' \"$INPUT\" | jq -r '.tool_name // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$TOOL\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=tool_use\" --data-urlencode \"tool_name=$TOOL\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=thinking\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=stop\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=stop\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=exit\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=exit\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
     "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "INPUT=$(cat); SID=$(printf '%s' \"$INPUT\" | jq -r '.session_id // empty'); CWD=$(printf '%s' \"$INPUT\" | jq -r '.cwd // empty'); HN=$(hostname); WSL_HOST=$([ -n \"$WSL_DISTRO_NAME\" ] && ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'); curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=approval_required\" \"http://${WSL_HOST:-127.0.0.1}:57017/hook\" 2>/dev/null || { [ -n \"$WSL_HOST\" ] && curl -s -m 1 -G --data-urlencode \"source=claude-code\" --data-urlencode \"session_id=$SID\" --data-urlencode \"cwd=$CWD\" --data-urlencode \"hostname=$HN\" --data-urlencode \"event=approval_required\" http://127.0.0.1:57017/hook 2>/dev/null; } || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ]
   }
 }

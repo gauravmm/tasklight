@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -17,10 +18,11 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from tasklight.config import AppConfig
-from tasklight.model import AgentState, AgentStateModel
+from tasklight.model import AgentState, AgentStateModel, TokenSample
 from tasklight.overlay.layout import build_layout, elide, hit_test
 from tasklight.overlay.presentation import glyph_for_state, hex_color
-from tasklight.overlay.types import AgentRow, HeaderRow, OverlayLayout
+from tasklight.overlay.sparkline import paint_sparkline
+from tasklight.overlay.types import AgentRow, HeaderRow, LayoutMetrics, LayoutRow, OverlayLayout
 from tasklight.overlay.view_model import build_rows
 
 
@@ -30,6 +32,7 @@ class OverlayColors:
     foreground: QColor
     dirname_fg: QColor
     hostname_fg: QColor
+    elapsed_fg: QColor
     approval_bg: QColor
     done_bg: QColor
 
@@ -125,11 +128,12 @@ class OverlayWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(
             self.rect(),
-            self._cfg.theme.corner_radius,
-            self._cfg.theme.corner_radius,
+            self._cfg.theme.window.corner_radius,
+            self._cfg.theme.window.corner_radius,
         )
 
         metrics = layout.metrics
+        now = time.monotonic()
         for layout_row in layout.rows:
             row = layout_row.row
             status = row.summary if isinstance(row, HeaderRow) else row
@@ -147,13 +151,28 @@ class OverlayWidget(QWidget):
                 ):
                     painter.fillRect(row_rect, self._colors.done_bg)
 
+            # Paint sparkline before text for AgentRow (non-APPROVAL) rows (§5.3).
+            if (
+                isinstance(row, AgentRow)
+                and row.record_session_id
+                and row.state != AgentState.APPROVAL
+                and self._cfg.theme.token_rate.enabled
+            ):
+                history = self._token_history_for(row.record_session_id)
+                if len(history) >= 2:
+                    resets = self._token_resets_for(row.record_session_id)
+                    cwm = self._context_window_max_for(row.record_session_id)
+                    self._paint_row_sparkline(
+                        painter, layout_row, metrics, history, resets, cwm, now
+                    )
+
             baseline = layout_row.top + painter.fontMetrics().ascent()
             if isinstance(row, HeaderRow):
                 self._paint_header(painter, row, baseline, layout)
             else:
                 self._paint_agent_row(painter, row, baseline, layout)
 
-        if not self._cfg.theme.system_cursor:
+        if not self._cfg.theme.behavior.system_cursor:
             self._draw_cursor(painter)
         painter.end()
 
@@ -181,7 +200,7 @@ class OverlayWidget(QWidget):
         if event is None:
             return
 
-        if not self._cfg.theme.system_cursor:
+        if not self._cfg.theme.behavior.system_cursor:
             self._cursor_pos = event.position()
             self._cursor_hide.start()
             self.update()
@@ -251,7 +270,7 @@ class OverlayWidget(QWidget):
 
     def enterEvent(self, event) -> None:  # noqa: N802
         if (
-            not self._cfg.theme.system_cursor
+            not self._cfg.theme.behavior.system_cursor
             and event is not None
             and hasattr(event, "position")
         ):
@@ -263,8 +282,8 @@ class OverlayWidget(QWidget):
         self.update()
 
     def _font(self) -> QFont:
-        font = QFont(self._cfg.theme.font_family)
-        font.setPixelSize(self._cfg.theme.font_size)
+        font = QFont(self._cfg.theme.text.font_family)
+        font.setPixelSize(self._cfg.theme.text.font_size)
         return font
 
     def _layout(self, fm: QFontMetrics) -> OverlayLayout:
@@ -274,18 +293,39 @@ class OverlayWidget(QWidget):
     def _build_colors(self) -> OverlayColors:
         theme = self._cfg.theme
         return OverlayColors(
-            background=hex_color(theme.background, theme.background_alpha),
-            foreground=hex_color(theme.foreground),
-            dirname_fg=hex_color(theme.dirname_fg),
-            hostname_fg=hex_color(theme.hostname_fg),
-            approval_bg=hex_color(theme.approval_bg),
-            done_bg=hex_color(theme.done_bg) if theme.done_bg else QColor(0, 0, 0, 0),
+            background=hex_color(theme.window.background, theme.window.background_alpha),
+            foreground=hex_color(theme.text.foreground),
+            dirname_fg=hex_color(theme.text.dirname_fg),
+            hostname_fg=hex_color(theme.text.hostname_fg),
+            elapsed_fg=hex_color(theme.text.elapsed_fg or theme.text.dirname_fg),
+            approval_bg=hex_color(theme.states.approval_bg),
+            done_bg=hex_color(theme.states.done_bg) if theme.states.done_bg else QColor(0, 0, 0, 0),
         )
 
+    def _token_history_for(self, session_id: str) -> list[TokenSample]:
+        """Return the token_history list for the given session_id, or empty."""
+        for record in self._model.records():
+            if record.session_id == session_id:
+                return record.token_history
+        return []
+
+    def _token_resets_for(self, session_id: str) -> list[tuple[float, float]]:
+        """Return the token_resets list for the given session_id, or empty."""
+        for record in self._model.records():
+            if record.session_id == session_id:
+                return record.token_resets
+        return []
+
+    def _context_window_max_for(self, session_id: str) -> int:
+        """Return the per-record context_window_max, or 0 if unknown."""
+        for record in self._model.records():
+            if record.session_id == session_id:
+                return record.context_window_max
+        return 0
+
     def _has_active_rows(self, layout: OverlayLayout) -> bool:
-        if not self._cfg.theme.animate_spinners:
-            return False
-        return any(
+        # Spinners need the timer if animate_spinners is on.
+        spinner_active = self._cfg.theme.behavior.animate_spinners and any(
             (
                 isinstance(layout_row.row, AgentRow)
                 and layout_row.row.state in (AgentState.THINKING, AgentState.TOOL)
@@ -297,6 +337,52 @@ class OverlayWidget(QWidget):
                 in (AgentState.THINKING, AgentState.TOOL)
             )
             for layout_row in layout.rows
+        )
+        if spinner_active:
+            return True
+
+        # Chart also needs the timer when any visible row has ≥2 samples (§5.5).
+        if self._cfg.theme.token_rate.enabled:
+            for layout_row in layout.rows:
+                row = layout_row.row
+                if not isinstance(row, AgentRow) or not row.record_session_id:
+                    continue
+                history = self._token_history_for(row.record_session_id)
+                if len(history) >= 2:
+                    return True
+
+        return False
+
+    def _paint_row_sparkline(
+        self,
+        painter: QPainter,
+        layout_row: LayoutRow,
+        metrics: LayoutMetrics,
+        history: list[TokenSample],
+        resets: list[tuple[float, float]],
+        context_window_max: int,
+        now: float,
+    ) -> None:
+        """Compute chart geometry and delegate to paint_sparkline (§5.1)."""
+        cfg = self._cfg.theme.token_rate
+        # Chart spans the full text band: from the start of the label
+        # (where dirname/tool text begins) to the row's right edge,
+        # passing under the elapsed-time column. Text is painted over
+        # the chart so it stays legible.
+        chart_left = metrics.label_x
+        chart_right = self.width() - metrics.pad
+        chart_top = layout_row.top + 1
+        chart_bottom = layout_row.top + layout_row.height - 1
+
+        rect = QRect(chart_left, chart_top, chart_right - chart_left, chart_bottom - chart_top)
+        paint_sparkline(
+            painter,
+            rect,
+            history,
+            resets,
+            cfg,
+            now,
+            context_window_max=context_window_max,
         )
 
     def _paint_header(
@@ -337,7 +423,7 @@ class OverlayWidget(QWidget):
             row.summary.source,
             row.summary.state,
             frame=self._frame,
-            animate=self._cfg.theme.animate_spinners,
+            animate=self._cfg.theme.behavior.animate_spinners,
             theme=self._cfg.theme,
         )
         painter.setPen(QPen(glyph_color))
@@ -385,7 +471,7 @@ class OverlayWidget(QWidget):
             row.source,
             row.state,
             frame=self._frame,
-            animate=self._cfg.theme.animate_spinners,
+            animate=self._cfg.theme.behavior.animate_spinners,
             theme=self._cfg.theme,
         )
         painter.setPen(QPen(glyph_color))
@@ -398,7 +484,7 @@ class OverlayWidget(QWidget):
             baseline,
             elide(fm, row.label, metrics.label_width),
         )
-        painter.setPen(QPen(self._colors.dirname_fg))
+        painter.setPen(QPen(self._colors.elapsed_fg))
         painter.drawText(elapsed_x, baseline, row.elapsed)
 
     def _draw_cursor(self, painter: QPainter) -> None:
@@ -418,8 +504,8 @@ class OverlayWidget(QWidget):
 
     def _apply_cursor_mode(self) -> None:
         self.setCursor(Qt.CursorShape.ArrowCursor)
-        self.setMouseTracking(not self._cfg.theme.system_cursor)
-        if self._cfg.theme.system_cursor:
+        self.setMouseTracking(not self._cfg.theme.behavior.system_cursor)
+        if self._cfg.theme.behavior.system_cursor:
             self._cursor_pos = None
 
     def _toggle_group(self, row: HeaderRow) -> None:

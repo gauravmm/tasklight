@@ -2,6 +2,8 @@
 
 import ipaddress
 import json
+import logging
+import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -9,6 +11,170 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 PORT = 57017
 _REQUIRED_KEYS = {"source", "session_id", "cwd", "event"}
+
+_log = logging.getLogger(__name__)
+
+# Per-model context-window sizes (tokens). Default of 200k covers
+# every current Claude model; entries here are explicit overrides for
+# the rare models that ship with a different ceiling. Match by prefix
+# so "claude-sonnet-4-6-20250812" still resolves.
+_DEFAULT_CONTEXT_WINDOW = 200_000
+_MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    # 1M-context models would go here, e.g.:
+    #   "claude-sonnet-4-1m": 1_000_000,
+}
+
+
+def _context_window_for_model(model: str | None) -> int | None:
+    """Best-effort mapping from a model identifier to its context window.
+
+    Returns None for non-Claude/unrecognised models so the caller can
+    fall back to a config default.
+    """
+    if not isinstance(model, str) or not model:
+        return None
+    for prefix, size in _MODEL_CONTEXT_WINDOW.items():
+        if model.startswith(prefix):
+            return size
+    if not model.startswith("claude-"):
+        return None
+    # Heuristic: any claude-*-1m variant ships with a 1M-token context
+    # window. Matches both bare suffix (claude-sonnet-4-1m) and dated
+    # suffix (claude-sonnet-4-1m-20250812).
+    if model.endswith("-1m") or "-1m-" in model:
+        return 1_000_000
+    return _DEFAULT_CONTEXT_WINDOW
+
+
+# Mapping from Claude Code hook_event_name to internal event name.
+_CLAUDE_EVENT_MAP: dict[str, str] = {
+    "SessionStart": "start",
+    "UserPromptSubmit": "thinking",
+    "PreToolUse": "tool_use",
+    "PostToolUse": "thinking",
+    "PermissionRequest": "approval_required",
+    "Stop": "stop",
+    "SessionEnd": "exit",
+}
+
+
+def _parse_multipart(content_type: str, body: bytes) -> dict[str, bytes]:
+    """Minimal multipart/form-data parser; returns field_name -> bytes.
+
+    Only handles the subset needed for /hook/claude-code (text fields and
+    file uploads without nested multipart). Does not handle quoted boundary
+    strings or charset conversion.
+    """
+    # Extract boundary from Content-Type header.
+    m = re.search(r'boundary=([^\s;]+)', content_type)
+    if not m:
+        return {}
+    boundary = m.group(1).strip('"\'').encode()
+
+    delimiter = b"--" + boundary
+    end_marker = b"--" + boundary + b"--"
+
+    fields: dict[str, bytes] = {}
+    # Split on delimiter lines.
+    parts = body.split(delimiter)
+    for part in parts:
+        # Skip preamble, epilogue, and the final "--" marker.
+        stripped = part.strip(b"\r\n")
+        if stripped in (b"", b"--"):
+            continue
+        # The closing boundary tail "--" appears on the last part; strip
+        # it as a literal suffix (not a byte set) if present.
+        if stripped.endswith(b"\r\n--"):
+            stripped = stripped[:-4]
+        elif stripped.endswith(b"\n--"):
+            stripped = stripped[:-3]
+        elif stripped.endswith(b"--"):
+            stripped = stripped[:-2]
+
+        # Split headers from body (double CRLF or double LF).
+        if b"\r\n\r\n" in stripped:
+            headers_raw, _, field_body = stripped.partition(b"\r\n\r\n")
+        elif b"\n\n" in stripped:
+            headers_raw, _, field_body = stripped.partition(b"\n\n")
+        else:
+            continue
+
+        # Strip the trailing CRLF that precedes the next delimiter.
+        if field_body.endswith(b"\r\n"):
+            field_body = field_body[:-2]
+        elif field_body.endswith(b"\n"):
+            field_body = field_body[:-1]
+
+        # Extract name from Content-Disposition header. Use \b to avoid
+        # matching `filename="..."` as the field name (curl's `-F @file`
+        # form adds a filename= parameter).
+        name_match = re.search(
+            rb'Content-Disposition:[^\r\n]*\bname="([^"]+)"',
+            headers_raw,
+            re.IGNORECASE,
+        )
+        if not name_match:
+            continue
+        name = name_match.group(1).decode(errors="replace")
+        fields[name] = field_body
+
+    return fields
+
+
+def _parse_context_tokens(value: object) -> int | None:
+    """Parse context_tokens field tolerantly; return None on failure."""
+    if value is None:
+        return None
+    try:
+        ct = int(value)
+        return ct if ct >= 0 else None
+    except (ValueError, TypeError):
+        _log.warning("context_tokens parse error (dropped): %r", value)
+        return None
+
+
+def _extract_usage_from_transcript_tail(tail_bytes: bytes) -> dict | None:
+    """Scan transcript JSONL tail in reverse for the latest message.usage.
+
+    Returns a dict with input_tokens, cache_creation_tokens,
+    cache_read_tokens, and (when the message names a recognised Claude
+    model) context_window_max. Returns None if no usable usage block
+    is found.
+    """
+    if not tail_bytes:
+        return None
+
+    lines = tail_bytes.split(b"\n")
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            # Leading line may be truncated mid-JSON; that's expected.
+            continue
+        message = obj.get("message")
+        if not isinstance(message, dict):
+            continue
+        usage = message.get("usage")
+        if isinstance(usage, dict):
+            input_t = int(usage.get("input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            # Guard against all-zero "usage" blocks: those would pin the
+            # sparkline to zero and don't represent a real measurement.
+            if input_t + cache_creation + cache_read > 0:
+                result: dict = {
+                    "input_tokens": input_t,
+                    "cache_creation_tokens": cache_creation,
+                    "cache_read_tokens": cache_read,
+                }
+                cwm = _context_window_for_model(message.get("model"))
+                if cwm is not None:
+                    result["context_window_max"] = cwm
+                return result
+    return None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -53,6 +219,18 @@ class _Handler(BaseHTTPRequestHandler):
             "data": {"tool_name": first("tool_name") or "tool"} if event == "tool_use" else {},
         }
 
+        ct = _parse_context_tokens(first("context_tokens"))
+        if ct is not None:
+            # Legacy /hook only knows total context_tokens, not the
+            # cache breakdown — bucket it all under input_tokens so the
+            # chart still shows something (will render as a single
+            # input-colored band).
+            payload["usage"] = {
+                "input_tokens": ct,
+                "cache_creation_tokens": 0,
+                "cache_read_tokens": 0,
+            }
+
         self.server.hook_server.event_received.emit(payload)
 
     def do_POST(self):
@@ -60,10 +238,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond(403)
             return
 
-        if self.path != "/hook":
-            self._respond(404)
-            return
+        parsed = urlparse(self.path)
+        path = parsed.path
 
+        if path == "/hook":
+            self._handle_post_hook()
+        elif path == "/hook/claude-code":
+            self._handle_post_claude_code()
+        else:
+            self._respond(404)
+
+    def _handle_post_hook(self) -> None:
+        """Handle POST /hook — generic normalised event."""
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
         self._respond(204)  # respond immediately before any processing
@@ -75,6 +261,96 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not _REQUIRED_KEYS.issubset(payload):
             return
+
+        # Parse optional context_tokens tolerantly. Bucket the legacy
+        # single-int form under input_tokens so the chart still
+        # renders.
+        raw_ct = payload.pop("context_tokens", None)
+        if raw_ct is not None:
+            ct = _parse_context_tokens(raw_ct)
+            if ct is not None:
+                payload["usage"] = {
+                    "input_tokens": ct,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 0,
+                }
+
+        self.server.hook_server.event_received.emit(payload)
+
+    def _handle_post_claude_code(self) -> None:
+        """Handle POST /hook/claude-code — multipart, Claude Code native hook JSON."""
+        content_type = self.headers.get("Content-Type", "")
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+
+        # Always respond before processing.
+        self._respond(204)
+
+        # Parse multipart/form-data using a minimal inline parser.
+        hook_json_bytes: bytes | None = None
+        transcript_tail_bytes: bytes = b""
+
+        try:
+            fields = _parse_multipart(content_type, body)
+            hook_field = fields.get("hook")
+            if hook_field is not None:
+                hook_json_bytes = hook_field
+
+            tail_field = fields.get("transcript_tail")
+            if tail_field is not None:
+                transcript_tail_bytes = tail_field
+        except Exception as exc:
+            _log.warning("claude-code hook: multipart parse error: %s", exc)
+            return
+
+        if hook_json_bytes is None:
+            _log.warning("claude-code hook: missing 'hook' field")
+            return
+
+        # Parse hook JSON.
+        try:
+            hook = json.loads(hook_json_bytes)
+        except (json.JSONDecodeError, ValueError) as exc:
+            _log.warning("claude-code hook: hook JSON parse error: %s", exc)
+            return
+
+        session_id = hook.get("session_id")
+        cwd = hook.get("cwd")
+        hook_event_name = hook.get("hook_event_name")
+
+        if not all([session_id, cwd, hook_event_name]):
+            _log.warning(
+                "claude-code hook: missing required field(s): %s",
+                [k for k in ("session_id", "cwd", "hook_event_name") if not hook.get(k)],
+            )
+            return
+
+        # Map hook_event_name -> internal event.
+        event = _CLAUDE_EVENT_MAP.get(hook_event_name)
+        if event is None:
+            # Unknown event name — silently ignore.
+            return
+
+        # Hostname from header or peer address.
+        hostname = self.headers.get("X-Tasklight-Hostname") or self.client_address[0]
+
+        payload: dict = {
+            "source": "claude-code",
+            "session_id": session_id,
+            "cwd": cwd,
+            "event": event,
+            "hostname": hostname,
+            "data": {},
+        }
+
+        if event == "tool_use":
+            tool_name = hook.get("tool_name") or "tool"
+            payload["data"] = {"tool_name": tool_name}
+
+        # Extract usage breakdown from transcript tail.
+        usage = _extract_usage_from_transcript_tail(transcript_tail_bytes)
+        if usage is not None:
+            payload["usage"] = usage
 
         self.server.hook_server.event_received.emit(payload)
 
