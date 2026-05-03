@@ -47,8 +47,9 @@ def _context_window_for_model(model: str | None) -> int | None:
 
 
 # Mapping from Claude Code hook_event_name to internal event name.
+# SessionStart is intentionally absent: Claude Code fires it on open before
+# any prompt, and we don't want a thinking spinner until UserPromptSubmit.
 _CLAUDE_EVENT_MAP: dict[str, str] = {
-    "SessionStart": "start",
     "UserPromptSubmit": "thinking",
     "PreToolUse": "tool_use",
     "PostToolUse": "thinking",

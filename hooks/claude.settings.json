@@ -1,9 +1,6 @@
 {
   "_comment": "Install hooks/tasklight-claude-hook.sh to ~/.claude/hooks/ before merging.",
   "hooks": {
-    "SessionStart": [
-      { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
-    ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/tasklight-claude-hook.sh" } ] }
     ],
